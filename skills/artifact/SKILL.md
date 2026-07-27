@@ -1,21 +1,31 @@
 ---
 name: artifact
-description: Publish a file to a shareable URL with the `artifact` CLI — HTML reports, Markdown docs, screenshots, screen recordings, PDFs, test logs. Use when output is too long or too visual to paste into a transcript and a human needs to open it in a browser.
+description: Publish a file to a shareable URL with the `artifact` CLI. Use when the user asks to publish, share, upload, or get a link for something — an HTML report, Markdown doc, screenshot, screen recording, PDF, or log.
 ---
 
 # Artifact
 
-`artifact` publishes a local file and prints its URL. **Publish** whenever the
-useful form of your output is a page someone opens rather than text they scroll
-past: a generated report, a screenshot of a rendering bug, a 4,000-line test
-log, a design doc.
+`artifact` publishes a local file and prints its URL.
 
-Everything published is readable by anyone holding the link, so publish only
-what is safe on a public web page.
+**Publishing is the user's call, every time.** A published URL is public to
+anyone holding it, and the files worth publishing are exactly the ones that tend
+to carry secrets — an HTML report with a hostname in it, a design doc with an
+internal URL, a log with a token in a stack trace. You cannot reliably tell from
+the outside, so the decision stays with the user.
 
 ## Publish
 
-**1. Name the file for what it is.** The extension alone decides how the URL
+**1. Get the ask.** Publish the file the user named. When something would be
+easier to review as a link and they have not asked, offer in one line and stop
+here:
+
+```
+That trace is 4,000 lines. Want me to publish it so you can open it in a browser?
+```
+
+*Done when:* the user named a file to publish, or accepted an offer.
+
+**2. Name the file for what it is.** The extension alone decides how the URL
 behaves — `build.log` displays in the browser, `build` downloads as a binary
 blob. Rename before publishing, not after.
 
@@ -32,7 +42,7 @@ paths resolve to nothing once published.
 
 *Done when:* the extension matches the content.
 
-**2. Publish and capture.**
+**3. Publish and capture.**
 
 ```bash
 URL=$(artifact report.html) || exit 1
@@ -43,7 +53,7 @@ Progress, warnings, and errors all go to stderr.
 
 *Done when:* the command exited 0 and `$URL` holds one URL.
 
-**3. Report the link.** Give the human the URL and one line naming what is
+**4. Report the link.** Give the human the URL and one line naming what is
 behind it.
 
 ```
@@ -83,17 +93,22 @@ The exit code says what to do. Read it before retrying.
 Stderr carries the reason in one line. Surface it rather than the exit code
 alone.
 
-## Acting without asking
+## What counts as being asked
 
-Publishing writes to a public URL, so treat the three commands differently:
+Step 1 gates `up`. The two commands that touch something already published need
+the same explicit request, and neither has an offer path:
 
-- **Publish freely** when the user asked for something they need to look at, or
-  when you are handing back a result. It creates a new URL and touches nothing
-  that already exists.
-- **Confirm before `update`** — it replaces the content at a URL that may
-  already be circulating.
-- **Confirm before `rm`** — it is irreversible, and the ID is retired forever
-  rather than reissued.
+- **`update`** — the user named both the artifact and the new content. It
+  replaces what is live at a URL that may already be circulating.
+- **`rm`** — the user asked for it by ID or slug. Deletion is irreversible and
+  the ID is retired forever rather than reissued.
+
+A request covers the whole task it was made for: told to publish four
+screenshots, publish all four without asking again. It expires with that task.
+
+Publish exactly what was named. When a request is broad — "publish the test
+output" — and several files could match, name the one you picked in your reply
+so a wrong guess is visible immediately.
 
 ## Reference
 
