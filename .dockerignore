@@ -1,0 +1,9 @@
+.git
+.gitignore
+.gitattributes
+.dockerignore
+Dockerfile
+dist/
+docs/
+skills/
+*.md

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gfm.md</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #fdfdfc;
+  --fg: #1c1c1e;
+  --muted: #6b6b73;
+  --border: #e2e2de;
+  --surface: #f4f4f1;
+  --accent: #0b57d0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --fg: #e6e6ea;
+    --muted: #9a9aa4;
+    --border: #2c2c34;
+    --surface: #1e1e25;
+    --accent: #8ab0ff;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  padding: 3rem 1.25rem 6rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+}
+main { max-width: 46rem; margin: 0 auto; }
+main > :first-child { margin-top: 0; }
+h1, h2, h3, h4, h5, h6 {
+  margin: 2.25rem 0 0.75rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.011em;
+}
+h1 { font-size: 2rem; letter-spacing: -0.021em; }
+h2 { font-size: 1.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.22rem; }
+h4 { font-size: 1.05rem; }
+h5, h6 { font-size: 1rem; color: var(--muted); }
+p, ul, ol, blockquote, table, pre { margin: 0 0 1.1rem; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+strong { font-weight: 650; }
+del { color: var(--muted); }
+ul, ol { padding-left: 1.5rem; }
+li { margin: 0.25rem 0; }
+li > ul, li > ol { margin: 0.25rem 0; }
+li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5rem; }
+li > input[type="checkbox"] { margin-right: 0.5rem; accent-color: var(--accent); }
+blockquote {
+  padding: 0.1rem 1rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+img, video { max-width: 100%; height: auto; }
+code, pre, kbd, samp {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875em;
+}
+code {
+  padding: 0.15em 0.38em;
+  border-radius: 4px;
+  background: var(--surface);
+}
+pre {
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  line-height: 1.5;
+}
+pre code { padding: 0; border-radius: 0; background: none; }
+table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+th, td { padding: 0.45rem 0.85rem; border: 1px solid var(--border); text-align: left; }
+th { background: var(--surface); font-weight: 650; }
+</style>
+</head>
+<body>
+<main>
+<h1>Release plan</h1>
+<p>A paragraph with <strong>bold</strong>, <em>italic</em>, <del>strikethrough</del>, <code>inline code</code>, and a
+bare autolink: <a href="https://example.com/docs">https://example.com/docs</a></p>
+<h2>Checklist</h2>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> Cut the release branch</li>
+<li><input disabled="" type="checkbox"> Run the smoke suite</li>
+<li><input disabled="" type="checkbox"> Publish the notes</li>
+</ul>
+<h2>Coverage</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th style="text-align:right">Statements</th>
+<th style="text-align:center">Owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>store</code></td>
+<td style="text-align:right">94%</td>
+<td style="text-align:center">infra</td>
+</tr>
+<tr>
+<td><code>api</code></td>
+<td style="text-align:right">88%</td>
+<td style="text-align:center">infra</td>
+</tr>
+<tr>
+<td><code>render</code></td>
+<td style="text-align:right">100%</td>
+<td style="text-align:center">docs</td>
+</tr>
+</tbody>
+</table>
+<h2>Snippet</h2>
+<pre><code class="language-go">func main() {
+	fmt.Println(&quot;hello &amp; &lt;world&gt;&quot;)
+}
+</code></pre>
+<blockquote>
+<p>A blockquote, for emphasis.</p>
+</blockquote>
+<ol>
+<li>First</li>
+<li>Second
+<ul>
+<li>Nested</li>
+<li>Items</li>
+</ul>
+</li>
+</ol>
+<div class="callout">Raw HTML is passed through unchanged.</div>
+<hr>
+<p><a href="https://example.com/next">A link</a> and an image: <img src="https://example.com/a.png" alt="alt text"></p>
+
+</main>
+</body>
+</html>
