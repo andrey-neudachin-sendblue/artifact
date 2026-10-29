@@ -18,7 +18,7 @@ func TestCollaborationSurvivesRestartAndDismissal(t *testing.T) {
 		return st
 	}
 	st := open()
-	art, err := st.Create(t.Context(), CreateInput{Filename: "plan.md", Slug: "durable-plan", Body: strings.NewReader("# One")})
+	art, err := st.Create(t.Context(), CreateInput{Type: TypeCollaborative, Filename: "plan.md", Slug: "durable-plan", Body: strings.NewReader("# One")})
 	if err != nil {
 		t.Fatal(err)
 	}

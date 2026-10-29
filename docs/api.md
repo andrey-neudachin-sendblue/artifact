@@ -11,7 +11,12 @@ consumes an upload.
 
 ## `POST /api/upload`
 
-Creates a new artifact. Accepts the file two ways.
+Creates a new artifact. `type` is `informative` by default; explicitly supply
+`type=collaborative` to enable suggestions and revision instructions. The type
+is fixed at creation. Both raw and multipart uploads accept the type in query
+or form parameters. Unknown types return `400 bad_request`.
+
+Accepts the file two ways.
 
 **Raw body** — preferred for agents and `curl`:
 
@@ -168,9 +173,16 @@ header (`inline` for everything previewable, `attachment` for the
 
 ## Suggestions and revision previews
 
-Existing upload, update, list and info responses additionally include
-`review_url`. Plain artifact URLs and raw content retain their original
-behavior; share the review URL to enable recipient feedback.
+Upload, update, list and info responses include `type`. Collaborative artifacts
+additionally include `review_url`; informative responses omit it. Collaboration
+APIs return `409 collaboration_disabled` for informative artifacts. Public
+review/content/instruction routes return 404 and informative content never
+advertises collaboration links. `PUT` requests attempting to change the type
+are rejected. Existing artifacts with feedback migrate to collaborative on
+first upgrade; those without feedback migrate to informative.
+
+Collaborative artifacts retain their ordinary content and raw URLs; share the
+review URL to expose the enabled feedback panel.
 
 | Method | Path | Authorization | Result |
 | --- | --- | --- | --- |
@@ -228,7 +240,7 @@ Review and candidate pages embed non-executable `application/json` in
 `script#artifact-agent-instructions`. The block is hidden from rendered UI.
 Their `rel="describedby"` HTML links and HTTP `Link` headers identify a public
 JSON copy at `/{ref}/review/instructions` (also `@n`) or
-`/{ref}/proposals/{proposal}/instructions`. Original and raw artifact responses
+`/{ref}/proposals/{proposal}/instructions`. Collaborative original and raw artifact responses
 also advertise the version-pinned instructions in a `Link` header, without
 changing their bytes. The metadata describes recipient submission and the
 owner inbox/propose/approval/accept process, identifies source/version and

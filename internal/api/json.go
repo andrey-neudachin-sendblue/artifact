@@ -31,11 +31,12 @@ type errorDetail struct {
 // artifactPayload is the response body shared by upload, update, and each
 // entry of the list response.
 type artifactPayload struct {
+	Type        string  `json:"type"`
 	ID          string  `json:"id"`
 	Slug        *string `json:"slug"`
 	URL         string  `json:"url"`
 	RawURL      string  `json:"raw_url"`
-	ReviewURL   string  `json:"review_url"`
+	ReviewURL   string  `json:"review_url,omitempty"`
 	Version     int     `json:"version"`
 	VersionURL  string  `json:"version_url"`
 	Filename    string  `json:"filename"`
@@ -62,10 +63,11 @@ type versionPayload struct {
 }
 
 type infoPayload struct {
+	Type          string           `json:"type"`
 	ID            string           `json:"id"`
 	Slug          *string          `json:"slug"`
 	URL           string           `json:"url"`
-	ReviewURL     string           `json:"review_url"`
+	ReviewURL     string           `json:"review_url,omitempty"`
 	LatestVersion int              `json:"latest_version"`
 	CreatedAt     string           `json:"created_at"`
 	UpdatedAt     string           `json:"updated_at"`
@@ -93,10 +95,11 @@ func (s *server) versionURL(a store.Artifact, n int) string {
 func (s *server) recordPayload(rec store.Record) artifactPayload {
 	return artifactPayload{
 		ID:          rec.Artifact.ID,
+		Type:        rec.Artifact.Type,
 		Slug:        optional(rec.Artifact.Slug),
 		URL:         s.artifactURL(rec.Artifact),
 		RawURL:      s.artifactURL(rec.Artifact) + "/raw",
-		ReviewURL:   s.artifactURL(rec.Artifact) + "/review",
+		ReviewURL:   s.reviewURL(rec.Artifact),
 		Version:     rec.Version.N,
 		VersionURL:  s.versionURL(rec.Artifact, rec.Version.N),
 		Filename:    rec.Version.Filename,
@@ -138,4 +141,11 @@ func optional(s string) *string {
 
 func stamp(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
+}
+
+func (s *server) reviewURL(art store.Artifact) string {
+	if art.Type != store.TypeCollaborative {
+		return ""
+	}
+	return s.artifactURL(art) + "/review"
 }

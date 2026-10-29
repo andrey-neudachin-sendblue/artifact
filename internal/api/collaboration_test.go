@@ -26,7 +26,7 @@ func (h *harness) suggestionJSON(id string, version int, message string) []byte 
 
 func TestSuggestionRevisionLifecycle(t *testing.T) {
 	h := newHarness(t)
-	resp, body := h.send(h.authed("POST", "/api/upload?filename=report.html&slug=review-report", strings.NewReader("<h1>old words</h1>")))
+	resp, body := h.send(h.authed("POST", "/api/upload?type=collaborative&filename=report.html&slug=review-report", strings.NewReader("<h1>old words</h1>")))
 	if resp.StatusCode != 201 {
 		t.Fatalf("upload: %d %s", resp.StatusCode, body)
 	}
@@ -111,7 +111,7 @@ func TestSuggestionRevisionLifecycle(t *testing.T) {
 
 func TestSuggestionsValidationAndPagination(t *testing.T) {
 	h := newHarness(t)
-	_, body := h.send(h.authed("POST", "/api/upload?filename=plan.md", strings.NewReader("# Plan")))
+	_, body := h.send(h.authed("POST", "/api/upload?type=collaborative&filename=plan.md", strings.NewReader("# Plan")))
 	var art artifactBody
 	json.Unmarshal(body, &art)
 	for _, tc := range []struct {
@@ -169,7 +169,7 @@ func TestSuggestionsValidationAndPagination(t *testing.T) {
 
 func TestStaleAndConcurrentProposalAcceptance(t *testing.T) {
 	h := newHarness(t)
-	_, body := h.send(h.authed("POST", "/api/upload?filename=plan.md", strings.NewReader("# One")))
+	_, body := h.send(h.authed("POST", "/api/upload?type=collaborative&filename=plan.md", strings.NewReader("# One")))
 	var art artifactBody
 	json.Unmarshal(body, &art)
 	var suggestion store.Suggestion

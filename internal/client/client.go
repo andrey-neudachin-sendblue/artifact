@@ -52,6 +52,7 @@ func (e *APIError) Error() string {
 
 // Artifact is the response body shared by upload, update, and list entries.
 type Artifact struct {
+	Type        string  `json:"type"`
 	ID          string  `json:"id"`
 	Slug        *string `json:"slug"`
 	URL         string  `json:"url"`
@@ -86,6 +87,7 @@ type Version struct {
 
 // Info is the GET /api/artifacts/{id} response.
 type Info struct {
+	Type          string    `json:"type"`
 	ID            string    `json:"id"`
 	Slug          *string   `json:"slug"`
 	URL           string    `json:"url"`
@@ -98,8 +100,8 @@ type Info struct {
 
 // Upload publishes path as a new artifact. Both the parsed response and the
 // raw response bytes are returned, so --json can echo the server verbatim.
-func (c *Client) Upload(ctx context.Context, path, filename, slug string) (*Artifact, []byte, error) {
-	query := url.Values{"filename": {filename}}
+func (c *Client) Upload(ctx context.Context, path, filename, slug, kind string) (*Artifact, []byte, error) {
+	query := url.Values{"filename": {filename}, "type": {kind}}
 	if slug != "" {
 		query.Set("slug", slug)
 	}

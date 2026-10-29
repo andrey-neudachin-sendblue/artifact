@@ -32,7 +32,7 @@ const api=async(path,options={})=>{
 };
 const run=(...args)=>execFileSync(cli,['--endpoint',endpoint,'--token',token,...args],{cwd:root,encoding:'utf8',env:{...process.env,ARTIFACT_CONFIG:join(dir,'absent-config')}}).trim();
 const json=(...args)=>JSON.parse(run('--json',...args));
-const upload=async(name,body)=>{const path=join(dir,name);await writeFile(path,body);return json('up',path);};
+const upload=async(name,body)=>{const path=join(dir,name);await writeFile(path,body);return json('up','--collab',path);};
 try{
  execFileSync('go',['build','-o',cli,'.'],{cwd:root,stdio:'pipe'});
  execFileSync('go',['build','-o',daemon,'./cmd/artifactd'],{cwd:root,stdio:'pipe'});
@@ -47,7 +47,19 @@ try{
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  const sentAuth=[];page.on('request',request=>{if(request.headers().authorization)sentAuth.push(request.url())});
  const original='# Launch plan\n\nThis explanation is unnecessarily technical.\n\n## Timing\n\nShip next week.\n';
+ // Ordinary uploads are informative and cannot be turned into collaborative
+ // artifacts by visiting a review URL or calling a suggestion API.
+ const informativeFile=join(dir,'informative.md');await writeFile(informativeFile,'# Informative report\n\nRead only.\n');
+ const informative=json('up',informativeFile);
+ assert.equal(informative.type,'informative');assert.equal(informative.review_url,undefined);
+ const ordinary=await api('/'+informative.id);
+ assert.ok(!ordinary.headers.get('link'));
+ assert.equal((await api('/'+informative.id+'/review')).status,404);
+ assert.equal((await api('/'+informative.id+'/review/instructions')).status,404);
+ const denied=await api('/api/artifacts/'+informative.id+'/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:1,message:'Try enabling feedback'})});
+ assert.equal(denied.status,409);assert.equal(JSON.parse(denied.body).error.code,'collaboration_disabled');
  const art=await upload('plan.md',original);
+ assert.equal(art.type,'collaborative');
  const review=run('review',art.id);
  assert.equal(review,`${endpoint}/${art.id}/review`);
  await page.goto(review);
@@ -181,7 +193,7 @@ try{
  assert.equal(errors.length,0,`Browser errors: ${errors.join('; ')}`);
  assert.equal(sentAuth.length,0,'The public browser must never receive the owner bearer token');
  await context.tracing.stop({path:join(evidence,'browser-trace.zip')});
- console.log(JSON.stringify({result:'PASS',scenarios:['browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser','hidden agent workflow metadata and JSON discovery'],evidence},null,2));
+ console.log(JSON.stringify({result:'PASS',scenarios:['informative by default with collaboration disabled','explicit collaborative creation','browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser','hidden agent workflow metadata and JSON discovery'],evidence},null,2));
 }catch(error){
  if(context){await context.tracing.stop({path:join(evidence,'failure-trace.zip')}).catch(()=>{});}
  await writeFile(join(evidence,'server.log'),log.join(''));

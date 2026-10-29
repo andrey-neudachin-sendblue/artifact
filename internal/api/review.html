@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<header><div><h1>{{.Title}}</h1><span class="muted">{{if .Proposal}}Proposed revision of{{else}}Viewing{{end}} version {{.Version}}</span></div><a href="{{.OriginalURL}}" target="_blank" rel="noopener">Open original</a></header>
+<header><div><h1>{{.Title}}</h1><span class="muted">Collaborative artifact · {{if .Proposal}}Proposed revision of{{else}}Viewing{{end}} version {{.Version}}</span></div><a href="{{.OriginalURL}}" target="_blank" rel="noopener">Open original</a></header>
 <main>
 <div class="viewer">
 {{if .Proposal}}

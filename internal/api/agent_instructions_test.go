@@ -12,7 +12,7 @@ import (
 
 func TestAgentInstructionsAreDiscoverableAndVersioned(t *testing.T) {
 	h := newHarness(t)
-	_, body := h.send(h.authed("POST", "/api/upload?filename=plan.md", strings.NewReader("# One")))
+	_, body := h.send(h.authed("POST", "/api/upload?type=collaborative&filename=plan.md", strings.NewReader("# One")))
 	var art artifactBody
 	json.Unmarshal(body, &art)
 	h.send(h.authed("PUT", "/api/artifacts/"+art.ID+"?filename=plan.md", strings.NewReader("# Two")))

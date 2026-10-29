@@ -13,7 +13,7 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 | `artifact info <id>` | Metadata and full version history |
 | `artifact rm <id>` | Delete the artifact, every version, and every blob |
 | `artifact open <id>` | Open in the operator's browser — for a human at a terminal, not for an agent |
-| `artifact review <id> [--version N]` | Print a review URL without changing content |
+| `artifact review <id> [--version N]` | Print a review URL for an existing collaborative artifact |
 | `artifact suggestions <id>` | Fetch pending feedback; `--json`, `--all`, `--after`, `--limit` supported |
 | `artifact propose <id> <suggestion> <file> --base-version N` | Upload a separate public candidate and print its preview URL |
 | `artifact accept <id> <proposal>` | Publish the reviewed candidate and address its suggestion atomically |
@@ -26,7 +26,7 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 
 | Flag | Applies to | Notes |
 | --- | --- | --- |
-| `--review` | `up` | Print the review URL instead of the ordinary URL; JSON always includes both |
+| `--collab` | `up` | Explicitly create a collaborative artifact and print its review URL; default uploads are informative |
 | `--base-version N` | `propose` | Required; version used to prepare the candidate |
 | `--slug SLUG` | `up` | Publish at a stable path instead of a random ID |
 | `--filename NAME` | `up`, `update` | Override the recorded filename, which is what drives content type |
@@ -64,6 +64,12 @@ first 512 bytes, then to `application/octet-stream`, which downloads.
 | anything else | `application/octet-stream` | Downloads |
 
 ## URL scheme
+
+Review, suggestion, proposal and agent-instruction routes only exist for
+collaborative artifacts. Informative artifacts have no collaboration metadata
+or review URL. The API reports `type` as `informative` or `collaborative`;
+`review_url` is omitted for informative artifacts. The hidden legacy `--review`
+flag is a compatibility alias for `--collab`.
 
 Given a published URL like `https://host/aB3xK9qZ`:
 
@@ -117,6 +123,7 @@ Errors are JSON with a stable `error.code`. Branch on the code, not the prose.
 | `unauthorized` | 401 | Token missing or wrong |
 | `not_found` | 404 | No such artifact, version, or filename |
 | `slug_taken` | 409 | Slug in use, including by a deleted artifact |
+| `collaboration_disabled` | 409 | Artifact is informative; collaboration must be chosen at creation |
 | `revision_conflict` | 409 | Published version moved, or suggestion/proposal is already resolved |
 | `suggestion_limit` | 429 | Anonymous per-artifact feedback limit; includes Retry-After |
 | `payload_too_large` | 413 | Larger than the server's upload cap |

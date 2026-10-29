@@ -204,7 +204,8 @@ func (c *cmdContext) table() *tabwriter.Writer {
 
 // UpCmd publishes a new artifact.
 type UpCmd struct {
-	Review   bool   `help:"Print the review URL so recipients can suggest changes."`
+	Collab   bool   `help:"Create a collaborative artifact with suggestions and agent revision instructions (explicit opt-in)."`
+	Review   bool   `hidden:"" help:"Legacy alias for --collab."`
 	File     string `arg:"" type:"path" help:"File to publish."`
 	Slug     string `help:"Publish at a stable path instead of a random ID." placeholder:"SLUG"`
 	Filename string `help:"Override the filename recorded for the upload." placeholder:"NAME"`
@@ -216,12 +217,16 @@ func (u *UpCmd) Run(c *cmdContext) error {
 		return err
 	}
 
-	art, raw, err := api.Upload(c.ctx, u.File, filenameFor(u.Filename, u.File), u.Slug)
+	kind := "informative"
+	if u.Collab || u.Review {
+		kind = "collaborative"
+	}
+	art, raw, err := api.Upload(c.ctx, u.File, filenameFor(u.Filename, u.File), u.Slug, kind)
 	if err != nil {
 		return err
 	}
 
-	if u.Review && !c.globals.JSON {
+	if (u.Collab || u.Review) && !c.globals.JSON {
 		art.URL = art.ReviewURL
 	}
 	return c.emitURL(art, raw)
@@ -310,6 +315,7 @@ func (i *InfoCmd) Run(c *cmdContext) error {
 
 	header := c.table()
 	fmt.Fprintf(header, "ID\t%s\n", info.ID)
+	fmt.Fprintf(header, "Type\t%s\n", info.Type)
 	fmt.Fprintf(header, "Slug\t%s\n", orDash(info.Slug))
 	fmt.Fprintf(header, "URL\t%s\n", info.URL)
 	fmt.Fprintf(header, "Latest\t%d\n", info.LatestVersion)

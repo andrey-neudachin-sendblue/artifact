@@ -91,9 +91,10 @@ func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	payload := infoPayload{
 		ID:            art.ID,
+		Type:          art.Type,
 		Slug:          optional(art.Slug),
 		URL:           s.artifactURL(*art),
-		ReviewURL:     s.artifactURL(*art) + "/review",
+		ReviewURL:     s.reviewURL(*art),
 		LatestVersion: art.LatestVersion,
 		CreatedAt:     stamp(art.CreatedAt),
 		UpdatedAt:     stamp(art.UpdatedAt),

@@ -10,7 +10,7 @@ import (
 
 func TestCollaborationCLI(t *testing.T) {
 	c := newCLI(t)
-	code, out, errout := c.run(c.connected("up", "--slug", "cli-review", "--review", c.writeFile("plan.md", "# Plan"))...)
+	code, out, errout := c.run(c.connected("up", "--slug", "cli-review", "--collab", c.writeFile("plan.md", "# Plan"))...)
 	if code != 0 || strings.TrimSpace(out) != "https://artifact.example.com/cli-review/review" {
 		t.Fatalf("review upload: %d %s %s", code, out, errout)
 	}
@@ -59,5 +59,29 @@ func TestCollaborationCLI(t *testing.T) {
 	code, _, _ = c.run(c.connected("accept", "cli-review", p.ID)...)
 	if code != 1 {
 		t.Fatalf("repeated accept exit: %d", code)
+	}
+}
+
+func TestCLIRequiresExplicitCollaborativeCreation(t *testing.T) {
+	c := newCLI(t)
+	code, out, errout := c.run(c.connected("--json", "up", c.writeFile("report.md", "# Report"))...)
+	var art struct {
+		ID        string `json:"id"`
+		Type      string `json:"type"`
+		ReviewURL string `json:"review_url"`
+	}
+	json.Unmarshal([]byte(out), &art)
+	if code != 0 || art.Type != "informative" || art.ReviewURL != "" {
+		t.Fatalf("default type: %d %s %s", code, out, errout)
+	}
+	code, out, errout = c.run(c.connected("review", art.ID)...)
+	if code != 2 || out != "" || !strings.Contains(errout, "informative") {
+		t.Fatalf("informative review enabled collaboration: %d %s %s", code, out, errout)
+	}
+	// The old flag is still explicit opt-in, not an automatic upgrade on review.
+	code, out, errout = c.run(c.connected("--json", "up", "--review", c.writeFile("legacy.md", "# Legacy"))...)
+	json.Unmarshal([]byte(out), &art)
+	if code != 0 || art.Type != "collaborative" || art.ReviewURL == "" {
+		t.Fatalf("legacy explicit opt-in: %d %s %s", code, out, errout)
 	}
 }

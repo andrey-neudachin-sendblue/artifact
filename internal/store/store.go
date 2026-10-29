@@ -28,14 +28,22 @@ import (
 
 // Errors callers are expected to distinguish.
 var (
-	ErrNotFound  = errors.New("artifact not found")
-	ErrSlugTaken = errors.New("slug already in use")
-	ErrBadSlug   = errors.New("invalid slug")
-	ErrEmptyBody = errors.New("empty body")
+	ErrNotFound         = errors.New("artifact not found")
+	ErrSlugTaken        = errors.New("slug already in use")
+	ErrBadSlug          = errors.New("invalid slug")
+	ErrEmptyBody        = errors.New("empty body")
+	ErrBadType          = errors.New("type must be informative or collaborative")
+	ErrNotCollaborative = errors.New("this artifact is informative; create with --collab to enable collaboration")
+)
+
+const (
+	TypeInformative   = "informative"
+	TypeCollaborative = "collaborative"
 )
 
 // Artifact is one published thing. Slug is empty when none was supplied.
 type Artifact struct {
+	Type          string
 	ID            string
 	Slug          string
 	LatestVersion int
@@ -77,6 +85,7 @@ const schema = `
 CREATE TABLE IF NOT EXISTS artifacts (
     id             TEXT    PRIMARY KEY,
     slug           TEXT    UNIQUE,
+    kind           TEXT    NOT NULL DEFAULT 'informative' CHECK(kind IN ('informative', 'collaborative')),
     latest_version INTEGER NOT NULL,
     created_at     TEXT    NOT NULL,
     updated_at     TEXT    NOT NULL,
@@ -145,6 +154,10 @@ func Open(dataDir, dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
+	if err := migrateArtifactTypes(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate artifact types: %w", err)
+	}
 	return &Store{db: db, dataDir: dataDir, blobDir: blobDir}, nil
 }
 
@@ -183,6 +196,7 @@ func (s *Store) artifactDir(id string) string {
 
 // CreateInput describes a new artifact. Filename must already be sanitized.
 type CreateInput struct {
+	Type     string
 	Filename string
 	Slug     string
 	Body     io.Reader
@@ -190,6 +204,12 @@ type CreateInput struct {
 
 // Create allocates an ID, stores the bytes durably, and commits version 1.
 func (s *Store) Create(ctx context.Context, in CreateInput) (*Record, error) {
+	if in.Type == "" {
+		in.Type = TypeInformative
+	}
+	if in.Type != TypeInformative && in.Type != TypeCollaborative {
+		return nil, ErrBadType
+	}
 	if in.Slug != "" {
 		if err := ValidateSlug(in.Slug); err != nil {
 			return nil, err
@@ -252,8 +272,8 @@ func (s *Store) commitCreate(ctx context.Context, id, dir string, in CreateInput
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO artifacts (id, slug, latest_version, created_at, updated_at) VALUES (?, ?, 1, ?, ?)`,
-		id, nullable(in.Slug), ts, ts,
+		`INSERT INTO artifacts (id, slug, kind, latest_version, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`,
+		id, nullable(in.Slug), in.Type, ts, ts,
 	); err != nil {
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
@@ -276,7 +296,7 @@ func (s *Store) commitCreate(ctx context.Context, id, dir string, in CreateInput
 	}
 
 	return &Record{
-		Artifact: Artifact{ID: id, Slug: in.Slug, LatestVersion: 1, CreatedAt: now, UpdatedAt: now},
+		Artifact: Artifact{ID: id, Slug: in.Slug, Type: in.Type, LatestVersion: 1, CreatedAt: now, UpdatedAt: now},
 		Version:  version,
 	}, nil
 }
@@ -462,7 +482,7 @@ func (s *Store) Get(ctx context.Context, ref string) (*Artifact, error) {
 }
 
 func (s *Store) lookup(ctx context.Context, where, arg string) (*Artifact, error) {
-	query := `SELECT id, slug, latest_version, created_at, updated_at FROM artifacts WHERE ` +
+	query := `SELECT id, slug, kind, latest_version, created_at, updated_at FROM artifacts WHERE ` +
 		where + ` AND deleted_at IS NULL`
 
 	var (
@@ -473,7 +493,7 @@ func (s *Store) lookup(ctx context.Context, where, arg string) (*Artifact, error
 	)
 
 	err := s.db.QueryRowContext(ctx, query, arg).
-		Scan(&art.ID, &slug, &art.LatestVersion, &created, &updated)
+		Scan(&art.ID, &slug, &art.Type, &art.LatestVersion, &created, &updated)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -581,7 +601,7 @@ func DecodeCursor(s string) (*Cursor, error) {
 	return &c, nil
 }
 
-const listColumns = `a.id, a.slug, a.latest_version, a.created_at, a.updated_at,
+const listColumns = `a.id, a.slug, a.kind, a.latest_version, a.created_at, a.updated_at,
        v.n, v.filename, v.content_type, v.size, v.sha256, v.created_at`
 
 // List returns live artifacts with their latest version, newest-updated first.
@@ -618,7 +638,7 @@ func (s *Store) List(ctx context.Context, limit int, after *Cursor) ([]Record, *
 		)
 
 		if err := rows.Scan(
-			&rec.Artifact.ID, &slug, &rec.Artifact.LatestVersion, &artCreated, &artUpdated,
+			&rec.Artifact.ID, &slug, &rec.Artifact.Type, &rec.Artifact.LatestVersion, &artCreated, &artUpdated,
 			&rec.Version.N, &rec.Version.Filename, &rec.Version.ContentType,
 			&rec.Version.Size, &rec.Version.SHA256, &verCreated,
 		); err != nil {
@@ -697,4 +717,39 @@ func parseTime(s string) time.Time {
 	}
 
 	return t.UTC()
+}
+
+// Existing uploads without feedback become informative. Artifacts with an
+// established suggestion/revision workflow keep that workflow through upgrade.
+func migrateArtifactTypes(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('artifacts') WHERE name = 'kind'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`ALTER TABLE artifacts ADD COLUMN kind TEXT NOT NULL DEFAULT 'informative' CHECK(kind IN ('informative', 'collaborative'))`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE artifacts SET kind = 'collaborative' WHERE EXISTS (SELECT 1 FROM suggestions WHERE artifact_id = artifacts.id)`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) GetCollaborative(ctx context.Context, ref string) (*Artifact, error) {
+	art, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	if art.Type != TypeCollaborative {
+		return nil, ErrNotCollaborative
+	}
+	return art, nil
 }

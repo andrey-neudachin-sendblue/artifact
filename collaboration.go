@@ -20,6 +20,9 @@ func (r *ReviewCmd) Run(c *cmdContext) error {
 	if err != nil {
 		return err
 	}
+	if info.Type != "collaborative" {
+		return usageError("this artifact is informative; create with --collab to enable collaboration")
+	}
 	target := info.ReviewURL
 	if r.Version != 0 {
 		if r.Version < 1 || r.Version > info.LatestVersion {

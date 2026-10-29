@@ -14,6 +14,7 @@ func (s *server) agentInstructions(id string, viewed, latest int, proposal *stor
 	api := s.baseURL + "/api/artifacts/" + id
 	instructions := map[string]any{
 		"schema_version":            1,
+		"artifact_type":             store.TypeCollaborative,
 		"artifact_id":               id,
 		"endpoint":                  s.baseURL,
 		"viewed_version":            viewed,

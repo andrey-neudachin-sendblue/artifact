@@ -36,6 +36,7 @@ func badRequest(format string, args ...any) *apiError {
 // upload is a request body resolved into the pieces the store needs.
 type upload struct {
 	filename string
+	kind     string
 	slug     string
 	body     io.Reader
 	release  func()
@@ -52,6 +53,7 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	rec, err := s.store.Create(r.Context(), store.CreateInput{
 		Filename: up.filename,
+		Type:     up.kind,
 		Slug:     up.slug,
 		Body:     up.body,
 	})
@@ -76,6 +78,10 @@ func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer up.release()
 
+	if up.kind != "" {
+		s.fail(w, r, "update type", badRequest("artifact type is fixed at creation"))
+		return
+	}
 	// A slug belongs to the artifact, not to a version, so it is ignored here.
 	rec, err := s.store.AddVersion(r.Context(), r.PathValue("id"), up.filename, up.body)
 	if err != nil {
@@ -96,6 +102,7 @@ func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (*upload, er
 
 	up := &upload{
 		filename: query.Get("filename"),
+		kind:     query.Get("type"),
 		slug:     query.Get("slug"),
 		body:     r.Body,
 		release:  func() {},
@@ -118,6 +125,7 @@ func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (*upload, er
 		up.body = file
 		up.filename = firstNonEmpty(multipartValue(r, "filename"), up.filename, header.Filename)
 		up.slug = firstNonEmpty(multipartValue(r, "slug"), up.slug)
+		up.kind = firstNonEmpty(multipartValue(r, "type"), up.kind)
 	}
 
 	if up.filename == "" {
@@ -154,6 +162,8 @@ func (s *server) fail(w http.ResponseWriter, r *http.Request, op string, err err
 			fmt.Sprintf("upload exceeds the %d byte limit", tooLarge.Limit))
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, codeNotFound, "artifact not found")
+	case errors.Is(err, store.ErrNotCollaborative):
+		writeError(w, http.StatusConflict, "collaboration_disabled", err.Error())
 	case errors.Is(err, store.ErrSlugTaken):
 		writeError(w, http.StatusConflict, codeSlugTaken, "slug already in use")
 	case errors.Is(err, store.ErrConflict):
@@ -162,6 +172,7 @@ func (s *server) fail(w http.ResponseWriter, r *http.Request, op string, err err
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "suggestion_limit", err.Error())
 	case errors.Is(err, store.ErrBadSlug),
+		errors.Is(err, store.ErrBadType),
 		errors.Is(err, store.ErrBadSuggestion),
 		errors.Is(err, store.ErrEmptyBody),
 		errors.Is(err, content.ErrBadFilename):

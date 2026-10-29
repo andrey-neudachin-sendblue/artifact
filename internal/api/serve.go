@@ -59,7 +59,9 @@ func (s *server) handleServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Link", reviewLink(ref(*art), n)+fmt.Sprintf(", </%s@%d/review/instructions>; rel=\"describedby\"; type=\"application/json\"", ref(*art), n))
+	if art.Type == store.TypeCollaborative {
+		w.Header().Set("Link", reviewLink(ref(*art), n)+fmt.Sprintf(", </%s@%d/review/instructions>; rel=\"describedby\"; type=\"application/json\"", ref(*art), n))
+	}
 	s.writeArtifact(w, r, art.ID, *version, raw)
 }
 
@@ -139,7 +141,7 @@ func splitRef(raw string) (string, int, bool) {
 }
 
 func (s *server) serveFailure(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrNotCollaborative) {
 		notFound(w)
 
 		return

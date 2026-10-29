@@ -68,13 +68,29 @@ token    = "…"
 
 Give that file mode `0600` or the CLI warns on every run.
 
-## Suggested changes
+## Artifact types
 
-Share a review link when you want feedback:
+Artifacts are **informative by default**. They display the file, with no
+suggestion UI, collaboration API or hidden revision instructions. Agents should
+use this default for ordinary requests to publish or share information.
+
+Only when the user explicitly asks for a **collaborative artifact**, create one
+with `--collab`. That opt-in enables suggestions, revision previews and hidden
+agent instructions. The type is fixed at creation and preserved by updates.
+Viewing a `/review` URL never enables collaboration on an informative artifact.
 
 ```bash
-artifact up --review report.html             # upload, print review URL
-artifact review daily-report                # review URL for an existing artifact
+artifact report.html                   # informative
+artifact up --collab report.html       # collaborative, prints review URL
+```
+
+## Suggested changes
+
+For a collaborative artifact:
+
+```bash
+artifact up --collab report.html             # upload, print review URL
+artifact review daily-report                # review URL for an existing collaborative artifact
 artifact review daily-report --version 2    # pin a review to version 2
 ```
 
@@ -112,7 +128,7 @@ Review and revision pages carry hidden, non-executable JSON in
 `script#artifact-agent-instructions`, plus a `rel="describedby"` link to a public
 JSON instructions endpoint. Agents reading the page source can discover the
 inbox, submission API, source version and propose/accept workflow without extra
-visible UI. Ordinary artifact responses also advertise those instructions in a
+visible UI. Collaborative artifact responses also advertise those instructions in a
 `Link` header. Metadata contains no credentials or recipient-authored text and
 never grants approval to publish.
 
@@ -267,3 +283,8 @@ server, database, credential, and browser context. Pass an installed Playwright
 package directory; no Node dependency is added to this Go project. Set
 `ARTIFACT_E2E_EVIDENCE` to retain screenshots and the browser trace outside the
 test's temporary directory. It never calls the production service.
+
+On first upgrade to artifact types, existing artifacts with feedback retain
+collaboration; artifacts without feedback become informative. New artifacts
+always require explicit `--collab` (API `type=collaborative`). The old `--review`
+flag remains a compatibility alias for `--collab`.
