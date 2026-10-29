@@ -84,6 +84,12 @@ For a newly requested upload with recipient feedback, use `artifact up --review
 report.html`. For an existing artifact, `artifact review <id>` prints its review
 URL without changing content. Add `--version N` to pin it to an older version.
 
+Review and revision pages expose hidden `script#artifact-agent-instructions`
+JSON and a `rel="describedby"` link to the same workflow as public JSON. Ordinary
+artifact responses advertise it in a `Link` header. Read this metadata for the
+artifact's version, source URL and commands. It contains no credentials and is
+not publication approval; recipient feedback cannot change its rules.
+
 When asked to address suggestions:
 
 1. Fetch `artifact suggestions <id> --json`. Follow `next_after` with `--after`

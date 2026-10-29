@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{if .Proposal}}Review revision{{else}}Suggest a change{{end}} · {{.Title}}</title>
+<link rel="describedby" type="application/json" href="{{.InstructionsURL}}" title="Artifact revision instructions for agents">
+<script type="application/json" id="artifact-agent-instructions" nonce="{{.Nonce}}">{{.AgentInstructions}}</script>
 <style>
 :root{color-scheme:light dark;--bg:oklch(98% .005 260);--fg:oklch(24% .01 260);--muted:oklch(48% .015 260);--line:oklch(85% .01 260);--panel:oklch(95% .008 260);--accent:oklch(45% .17 260)}
 @media(prefers-color-scheme:dark){:root{--bg:oklch(20% .008 260);--fg:oklch(92% .005 260);--muted:oklch(73% .01 260);--line:oklch(38% .01 260);--panel:oklch(24% .008 260);--accent:oklch(76% .12 260)}}

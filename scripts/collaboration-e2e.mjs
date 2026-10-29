@@ -52,6 +52,16 @@ try{
  assert.equal(review,`${endpoint}/${art.id}/review`);
  await page.goto(review);
  await expect(page.getByRole('heading',{name:'Suggest a change'})).toBeVisible();
+ await expect(page.locator('#artifact-agent-instructions')).toBeHidden();
+ const agentInstructions=JSON.parse(await page.locator('#artifact-agent-instructions').textContent());
+ assert.equal(agentInstructions.artifact_id,art.id);
+ assert.equal(agentInstructions.viewed_version,1);
+ assert.ok(agentInstructions.instructions.some(line=>line.includes('owner explicitly approves')));
+ assert.ok(!JSON.stringify(agentInstructions).includes(token));
+ const discovery=await page.locator('link[rel="describedby"]').getAttribute('href');
+ const discovered=JSON.parse((await api(discovery)).body);
+ assert.equal(discovered.artifact_id,art.id);
+ assert.ok(!await page.locator('body').innerText().then(text=>text.includes('latest_version_at_request')));
  const documentFrame=page.frameLocator('iframe[title="Artifact version 1"]');
  await expect(documentFrame.getByRole('heading',{name:'Launch plan'})).toBeVisible();
  assert.equal(await documentFrame.locator('body').evaluate(()=>document.compatMode),'CSS1Compat');
@@ -79,6 +89,9 @@ try{
  assert.equal((await api(`/${art.id}/raw`)).body,original);
  await page.goto(proposal.preview_url);
  await expect(page.getByRole('heading',{name:'Review revision'})).toBeVisible();
+ const candidateInstructions=JSON.parse(await page.locator('#artifact-agent-instructions').textContent());
+ assert.equal(candidateInstructions.proposal.id,proposal.id);
+ await expect(page.locator('#artifact-agent-instructions')).toBeHidden();
  await expect(page.frameLocator('iframe[title="Original version"]').getByText('Ship next week.')).toBeVisible();
  await expect(page.frameLocator('iframe[title="Proposed revision"]').getByText('Ship Friday.')).toBeVisible();
  await expect(page.getByText(`artifact accept ${art.id} ${proposal.id}`)).toBeVisible();
@@ -168,7 +181,7 @@ try{
  assert.equal(errors.length,0,`Browser errors: ${errors.join('; ')}`);
  assert.equal(sentAuth.length,0,'The public browser must never receive the owner bearer token');
  await context.tracing.stop({path:join(evidence,'browser-trace.zip')});
- console.log(JSON.stringify({result:'PASS',scenarios:['browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser'],evidence},null,2));
+ console.log(JSON.stringify({result:'PASS',scenarios:['browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser','hidden agent workflow metadata and JSON discovery'],evidence},null,2));
 }catch(error){
  if(context){await context.tracing.stop({path:join(evidence,'failure-trace.zip')}).catch(()=>{});}
  await writeFile(join(evidence,'server.log'),log.join(''));

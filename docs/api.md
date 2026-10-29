@@ -223,3 +223,14 @@ selected text only. Quotes and feedback are escaped in the shell. Previews and
 feedback belong to the artifact and are deleted with it. Candidate previews
 are public to anyone holding their link. Existing databases gain the new tables
 at startup using the same idempotent schema initialization as before.
+
+Review and candidate pages embed non-executable `application/json` in
+`script#artifact-agent-instructions`. The block is hidden from rendered UI.
+Their `rel="describedby"` HTML links and HTTP `Link` headers identify a public
+JSON copy at `/{ref}/review/instructions` (also `@n`) or
+`/{ref}/proposals/{proposal}/instructions`. Original and raw artifact responses
+also advertise the version-pinned instructions in a `Link` header, without
+changing their bytes. The metadata describes recipient submission and the
+owner inbox/propose/approval/accept process, identifies source/version and
+proposal context, and includes no credentials or recipient-controlled feedback.
+It is workflow documentation, never permission to execute tools or publish.

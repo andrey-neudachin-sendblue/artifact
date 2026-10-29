@@ -24,16 +24,18 @@ var reviewFiles embed.FS
 var reviewTemplate = template.Must(template.ParseFS(reviewFiles, "review.html"))
 
 type reviewData struct {
-	Title       string
-	Version     int
-	Latest      int
-	ContentURL  string
-	OriginalURL string
-	ArtifactID  string
-	Nonce       string
-	Proposal    *store.Proposal
-	Suggestion  *store.Suggestion
-	Stale       bool
+	Title             string
+	Version           int
+	Latest            int
+	ContentURL        string
+	OriginalURL       string
+	ArtifactID        string
+	Nonce             string
+	Proposal          *store.Proposal
+	Suggestion        *store.Suggestion
+	Stale             bool
+	InstructionsURL   string
+	AgentInstructions map[string]any
 }
 
 func (s *server) reviewVersion(r *http.Request) (*store.Artifact, *store.Version, error) {
@@ -89,6 +91,11 @@ func (s *server) writeReview(w http.ResponseWriter, r *http.Request, data review
 		return
 	}
 	data.Nonce = hex.EncodeToString(nonce)
+	data.InstructionsURL = data.OriginalURL + "/review/instructions"
+	if data.Proposal != nil {
+		data.InstructionsURL = "/" + data.ArtifactID + "/proposals/" + data.Proposal.ID + "/instructions"
+	}
+	data.AgentInstructions = s.agentInstructions(data.ArtifactID, data.Version, data.Latest, data.Proposal)
 	var page bytes.Buffer
 	if err := reviewTemplate.Execute(&page, data); err != nil {
 		s.serveFailure(w, r, err)
@@ -98,6 +105,7 @@ func (s *server) writeReview(w http.ResponseWriter, r *http.Request, data review
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Link", "<"+data.InstructionsURL+">; rel=\"describedby\"; type=\"application/json\"")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+data.Nonce+"'; style-src 'unsafe-inline'; frame-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 	_, _ = w.Write(page.Bytes())
 }

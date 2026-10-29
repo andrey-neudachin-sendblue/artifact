@@ -69,8 +69,10 @@ func New(st *store.Store, cfg Config) http.Handler {
 	protected("POST /api/artifacts/{id}/proposals/{proposal}/accept", s.handleAccept)
 	mux.HandleFunc("GET /{ref}/review", s.handleReview)
 	mux.HandleFunc("GET /{ref}/review/content", s.handleReviewContent)
+	mux.HandleFunc("GET /{ref}/review/instructions", s.handleAgentInstructions)
 	mux.HandleFunc("GET /{ref}/proposals/{proposal}", s.handleProposalPreview)
 	mux.HandleFunc("GET /{ref}/proposals/{proposal}/content", s.handleProposalContent)
+	mux.HandleFunc("GET /{ref}/proposals/{proposal}/instructions", s.handleAgentInstructions)
 
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /{ref}", s.handleServe)

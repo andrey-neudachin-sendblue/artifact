@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -58,7 +59,7 @@ func (s *server) handleServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Link", reviewLink(ref(*art), n))
+	w.Header().Set("Link", reviewLink(ref(*art), n)+fmt.Sprintf(", </%s@%d/review/instructions>; rel=\"describedby\"; type=\"application/json\"", ref(*art), n))
 	s.writeArtifact(w, r, art.ID, *version, raw)
 }
 

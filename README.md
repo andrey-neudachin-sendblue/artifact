@@ -108,6 +108,14 @@ current `--base-version`.
 for pagination. Suggestions and candidates persist across server restarts.
 Deleting the artifact removes its feedback and all candidate bytes as well.
 
+Review and revision pages carry hidden, non-executable JSON in
+`script#artifact-agent-instructions`, plus a `rel="describedby"` link to a public
+JSON instructions endpoint. Agents reading the page source can discover the
+inbox, submission API, source version and propose/accept workflow without extra
+visible UI. Ordinary artifact responses also advertise those instructions in a
+`Link` header. Metadata contains no credentials or recipient-authored text and
+never grants approval to publish.
+
 Normal artifact URLs and `/raw` remain byte-identical. Review URLs use a
 sandboxed viewer: scripts in an uploaded mockup cannot access the feedback
 form. Features requiring same-origin access, browser plugins or downloads may
