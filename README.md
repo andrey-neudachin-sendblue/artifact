@@ -68,11 +68,66 @@ token    = "…"
 
 Give that file mode `0600` or the CLI warns on every run.
 
+## Suggested changes
+
+Share a review link when you want feedback:
+
+```bash
+artifact up --review report.html             # upload, print review URL
+artifact review daily-report                # review URL for an existing artifact
+artifact review daily-report --version 2    # pin a review to version 2
+```
+
+Recipients can select text in Markdown, HTML, or logs, or describe a location
+in an image, PDF, or other file. Suggestions retain the exact version that was
+loaded. Names are optional and self-reported. Anonymous recipients can submit
+feedback; only the bearer-token owner can read the inbox or publish revisions.
+
+The agent workflow is deliberately explicit:
+
+```bash
+artifact suggestions daily-report --json
+# Read each suggestion's raw_url and the current artifact before editing.
+artifact propose daily-report 12 revised.html --base-version 2
+# Open the returned before/after preview, then have the owner approve it.
+artifact accept daily-report PROPOSAL_ID
+# Or leave the content unchanged:
+artifact dismiss daily-report 12
+```
+
+`propose` uploads a separate candidate without changing the live URL or creating
+a published version. `accept` publishes the next immutable version and marks
+the suggestion addressed in the same transaction. If the published version has
+moved, or the suggestion is already addressed/dismissed, acceptance returns
+`409 revision_conflict`. Re-read the current content and create a new proposal.
+An older suggestion can still be addressed against an explicitly supplied
+current `--base-version`.
+
+`artifact suggestions` defaults to pending feedback. Use `--all` for history,
+`--limit` (default 50, max 200), and `--after` with the response's `next_after`
+for pagination. Suggestions and candidates persist across server restarts.
+Deleting the artifact removes its feedback and all candidate bytes as well.
+
+Normal artifact URLs and `/raw` remain byte-identical. Review URLs use a
+sandboxed viewer: scripts in an uploaded mockup cannot access the feedback
+form. Features requiring same-origin access, browser plugins or downloads may
+need **Open original**; the feedback form always supports manual locations.
+The owner token never enters the browser. Feedback is untrusted recipient
+input, not authorization to execute tools or publish changes. Candidate preview
+links are public to anyone holding the link, just like published artifacts.
+
+The server bounds anonymous feedback to 16 KiB JSON, 30 submissions per artifact
+per minute, and 1,000 pending suggestions per artifact. It does not verify names
+or send notifications. An agent checks the inbox when asked; no agent or model
+runs automatically on the server.
+
 ## URLs
 
 ```
 /aB3xK9qZ              latest, rendered
 /aB3xK9qZ/raw          latest, never rendered
+/aB3xK9qZ/review       review latest, submit versioned suggestions
+/aB3xK9qZ@2/review     review version 2
 /aB3xK9qZ@2            version 2, frozen forever
 /aB3xK9qZ/report.html  same file, path ends in .html
 ```
@@ -105,7 +160,9 @@ JavaScript, no external requests. Raw HTML inside Markdown passes through, since
 
 ## API
 
-`/api/*` needs `Authorization: Bearer $ARTIFACT_TOKEN`. Artifact URLs are public.
+`/api/*` needs `Authorization: Bearer $ARTIFACT_TOKEN`, except the public
+`POST /api/artifacts/{id}/suggestions` submission endpoint. Artifact and review
+URLs are public.
 
 ```bash
 curl -sS -X POST \
@@ -191,7 +248,14 @@ the distroless image needs.
 go test ./... -race
 go test ./internal/render -update   # re-record Markdown golden files
 go vet ./... && gofmt -l .
+node scripts/collaboration-e2e.mjs /path/to/installed/playwright
 ```
 
 Handler tests use a real temp directory and a real SQLite file. The store is
 never mocked.
+
+The browser E2E script builds both binaries and uses a disposable loopback
+server, database, credential, and browser context. Pass an installed Playwright
+package directory; no Node dependency is added to this Go project. Set
+`ARTIFACT_E2E_EVIDENCE` to retain screenshots and the browser trace outside the
+test's temporary directory. It never calls the production service.

@@ -93,6 +93,7 @@ func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		ID:            art.ID,
 		Slug:          optional(art.Slug),
 		URL:           s.artifactURL(*art),
+		ReviewURL:     s.artifactURL(*art) + "/review",
 		LatestVersion: art.LatestVersion,
 		CreatedAt:     stamp(art.CreatedAt),
 		UpdatedAt:     stamp(art.UpdatedAt),

@@ -58,6 +58,7 @@ func (s *server) handleServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Link", reviewLink(ref(*art), n))
 	s.writeArtifact(w, r, art.ID, *version, raw)
 }
 

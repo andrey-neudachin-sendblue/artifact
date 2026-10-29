@@ -35,6 +35,7 @@ type artifactPayload struct {
 	Slug        *string `json:"slug"`
 	URL         string  `json:"url"`
 	RawURL      string  `json:"raw_url"`
+	ReviewURL   string  `json:"review_url"`
 	Version     int     `json:"version"`
 	VersionURL  string  `json:"version_url"`
 	Filename    string  `json:"filename"`
@@ -64,6 +65,7 @@ type infoPayload struct {
 	ID            string           `json:"id"`
 	Slug          *string          `json:"slug"`
 	URL           string           `json:"url"`
+	ReviewURL     string           `json:"review_url"`
 	LatestVersion int              `json:"latest_version"`
 	CreatedAt     string           `json:"created_at"`
 	UpdatedAt     string           `json:"updated_at"`
@@ -94,6 +96,7 @@ func (s *server) recordPayload(rec store.Record) artifactPayload {
 		Slug:        optional(rec.Artifact.Slug),
 		URL:         s.artifactURL(rec.Artifact),
 		RawURL:      s.artifactURL(rec.Artifact) + "/raw",
+		ReviewURL:   s.artifactURL(rec.Artifact) + "/review",
 		Version:     rec.Version.N,
 		VersionURL:  s.versionURL(rec.Artifact, rec.Version.N),
 		Filename:    rec.Version.Filename,

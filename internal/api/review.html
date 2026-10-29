@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{if .Proposal}}Review revision{{else}}Suggest a change{{end}} · {{.Title}}</title>
+<style>
+:root{color-scheme:light dark;--bg:oklch(98% .005 260);--fg:oklch(24% .01 260);--muted:oklch(48% .015 260);--line:oklch(85% .01 260);--panel:oklch(95% .008 260);--accent:oklch(45% .17 260)}
+@media(prefers-color-scheme:dark){:root{--bg:oklch(20% .008 260);--fg:oklch(92% .005 260);--muted:oklch(73% .01 260);--line:oklch(38% .01 260);--panel:oklch(24% .008 260);--accent:oklch(76% .12 260)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,sans-serif}header{display:flex;gap:1rem;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:1rem 1.5rem}h1{font-size:1.2rem;line-height:1.3;margin:0;overflow-wrap:anywhere}.muted{color:var(--muted);font-size:.85rem}a{color:var(--accent);text-underline-offset:3px}main{display:grid;grid-template-columns:minmax(0,1fr) 22rem;height:calc(100dvh - 85px);min-height:36rem}.viewer{min-width:0;display:flex;flex-direction:column}.viewer>p{margin:.5rem 1rem;color:var(--muted);font-size:.85rem}iframe{width:100%;flex:1;min-height:24rem;border:0;background:var(--bg)}aside{padding:1.5rem;border-left:1px solid var(--line);overflow-y:auto;background:var(--panel)}h2{font-size:1.25rem;margin:0 0 .6rem}p{margin:0 0 1rem}label{display:block;font-weight:600;margin:1.1rem 0 .35rem}input,textarea,button{font:inherit;color:inherit}input,textarea{width:100%;padding:.6rem .7rem;background:var(--bg);border:1px solid var(--line);border-radius:5px}textarea{resize:vertical;min-height:5rem}button{cursor:pointer;padding:.65rem .85rem;border:1px solid var(--line);border-radius:5px;background:var(--bg)}button[type=submit]{margin-top:1.2rem;width:100%;background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:650}button:disabled{opacity:.6;cursor:wait}button:hover:not(:disabled){filter:brightness(.95)}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}#feedback{margin-top:1rem;overflow-wrap:anywhere}code{font:13px/1.5 ui-monospace,monospace;display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding:.75rem;background:var(--bg);border:1px solid var(--line);border-radius:5px}blockquote{margin:1rem 0;padding:.75rem;background:var(--bg);border:1px solid var(--line);border-radius:5px;white-space:pre-wrap;overflow-wrap:anywhere}.comparison{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0}.comparison section{display:flex;flex-direction:column;min-width:0}.comparison h2{padding:.7rem 1rem;margin:0;font-size:1rem;border-bottom:1px solid var(--line)}.comparison section+section{border-left:1px solid var(--line)}.comparison iframe{min-height:28rem}small{font-weight:400;color:var(--muted)}[hidden]{display:none!important}
+@media(max-width:800px){header{padding:.9rem 1rem;align-items:flex-start}main{display:flex;flex-direction:column;height:auto;min-height:0}.viewer{height:60dvh;min-height:25rem}aside{border-left:0;border-top:1px solid var(--line);overflow:visible;padding:1.25rem}.comparison{grid-template-columns:1fr;overflow:auto}.comparison iframe{min-height:22rem}.comparison section+section{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header><div><h1>{{.Title}}</h1><span class="muted">{{if .Proposal}}Proposed revision of{{else}}Viewing{{end}} version {{.Version}}</span></div><a href="{{.OriginalURL}}" target="_blank" rel="noopener">Open original</a></header>
+<main>
+<div class="viewer">
+{{if .Proposal}}
+<div class="comparison"><section><h2>Before · version {{.Version}}</h2><iframe title="Original version" sandbox="allow-scripts" src="{{.OriginalURL}}/review/content"></iframe></section><section><h2>Proposed revision</h2><iframe id="artifact-content" title="Proposed revision" sandbox="allow-scripts" src="{{.ContentURL}}"></iframe></section></div>
+{{else}}
+<p>Select text in the document to attach it to your suggestion. You can also describe a location below.</p>
+<iframe id="artifact-content" title="Artifact version {{.Version}}" sandbox="allow-scripts" src="{{.ContentURL}}"></iframe>
+{{end}}
+</div>
+<aside>
+{{if .Proposal}}
+<h2>Review revision</h2>
+<p>{{if eq .Proposal.Status "accepted"}}This revision was published.{{else if .Stale}}This revision needs to be refreshed. The published version or suggestion status has changed.{{else}}This is a preview. The published artifact still shows version {{.Latest}}.{{end}}</p>
+<p class="muted">Suggestion on version {{.Suggestion.Version}}{{if .Suggestion.Author}} from {{.Suggestion.Author}}{{end}}</p>
+<blockquote>{{.Suggestion.Message}}</blockquote>
+{{if .Suggestion.Quote}}<p class="muted">Selected text</p><blockquote>{{.Suggestion.Quote}}</blockquote>{{end}}
+{{if .Suggestion.Location}}<p>Location: {{.Suggestion.Location}}</p>{{end}}
+{{if and (eq .Proposal.Status "pending") (not .Stale)}}<p>After reviewing both versions, ask your agent to publish this revision:</p><code>artifact accept {{.ArtifactID}} {{.Proposal.ID}}</code>{{end}}
+<p class="muted">Only the owner can publish. Feedback and previews never run agent tools automatically.</p>
+{{else}}
+<h2>Suggest a change</h2>
+<p>Tell the owner what to change. Your suggestion stays attached to version {{.Version}}.</p>
+{{if ne .Version .Latest}}<p><strong>You’re viewing an older version.</strong> The latest is version {{.Latest}}. <a href="/{{.ArtifactID}}/review">Review latest</a></p>{{end}}
+<form id="suggestion-form">
+<label for="message">What should change?</label><textarea id="message" name="message" required maxlength="8000" rows="5" placeholder="Make the explanation less technical…"></textarea>
+<label for="quote">Selected text <small>(optional)</small></label><textarea id="quote" name="quote" maxlength="2000" rows="2" placeholder="Select text in the document, or paste a short quote."></textarea>
+<label for="location">Location <small>(optional)</small></label><input id="location" name="location" maxlength="240" placeholder="Page 2, chart title, top-right button…">
+<label for="author">Your name <small>(optional)</small></label><input id="author" name="author" maxlength="120" autocomplete="name">
+<button type="submit">Send suggestion</button>
+<p class="muted" style="margin-top:.8rem">The owner reviews suggestions before publishing changes. Anyone with the artifact link can view its content; keep feedback suitable for sharing.</p>
+</form>
+<p id="feedback" role="status" aria-live="polite"></p>
+<script nonce="{{.Nonce}}">
+const form=document.getElementById('suggestion-form');
+const feedback=document.getElementById('feedback');
+const frame=document.getElementById('artifact-content');
+addEventListener('message',event=>{
+ if(event.source!==frame.contentWindow||!event.data||event.data.type!=='artifact-selection'||typeof event.data.quote!=='string')return;
+ document.getElementById('quote').value=event.data.quote.slice(0,500);
+});
+form.addEventListener('submit',async event=>{
+ event.preventDefault();const button=form.querySelector('button[type=submit]');button.disabled=true;feedback.textContent='Sending suggestion…';
+ const body={version:{{.Version}},message:form.elements.message.value,quote:form.elements.quote.value,location:form.elements.location.value,author:form.elements.author.value};
+ try{
+  const response=await fetch('/api/artifacts/'+{{.ArtifactID}}+'/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.error?.message||'Could not send suggestion. Try again.');
+  form.elements.message.value='';form.elements.quote.value='';form.elements.location.value='';
+  feedback.textContent='Suggestion #'+result.id+' sent for version '+result.version+'. The owner can now review it.';
+ }catch(error){feedback.textContent=error.message||'Could not send suggestion. Your text is still here. Try again.';}
+ finally{button.disabled=false;}
+});
+</script>
+{{end}}
+</aside>
+</main>
+</body>
+</html>

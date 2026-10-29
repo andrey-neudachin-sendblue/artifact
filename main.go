@@ -60,13 +60,18 @@ type Globals struct {
 type CLI struct {
 	Globals
 
-	Up      UpCmd      `cmd:"" default:"withargs" help:"Upload a file and print its URL."`
-	Update  UpdateCmd  `cmd:"" help:"Upload new contents for an existing artifact."`
-	List    ListCmd    `cmd:"" help:"List recent artifacts, newest first."`
-	Info    InfoCmd    `cmd:"" help:"Show metadata and version history for an artifact."`
-	Rm      RmCmd      `cmd:"" help:"Delete an artifact, all versions, and all blobs."`
-	Open    OpenCmd    `cmd:"" help:"Open an artifact in the default browser."`
-	Version VersionCmd `cmd:"" help:"Print version, commit, and build date."`
+	Up          UpCmd          `cmd:"" default:"withargs" help:"Upload a file and print its URL."`
+	Update      UpdateCmd      `cmd:"" help:"Upload new contents for an existing artifact."`
+	List        ListCmd        `cmd:"" help:"List recent artifacts, newest first."`
+	Info        InfoCmd        `cmd:"" help:"Show metadata and version history for an artifact."`
+	Rm          RmCmd          `cmd:"" help:"Delete an artifact, all versions, and all blobs."`
+	Open        OpenCmd        `cmd:"" help:"Open an artifact in the default browser."`
+	Review      ReviewCmd      `cmd:"" help:"Print a shareable link for suggesting changes."`
+	Suggestions SuggestionsCmd `cmd:"" help:"Fetch recipient suggestions for an artifact."`
+	Propose     ProposeCmd     `cmd:"" help:"Upload a revision for preview without publishing it."`
+	Accept      AcceptCmd      `cmd:"" help:"Publish a reviewed proposal as the next version."`
+	Dismiss     DismissCmd     `cmd:"" help:"Dismiss a suggestion without changing the artifact."`
+	Version     VersionCmd     `cmd:"" help:"Print version, commit, and build date."`
 }
 
 func main() {
@@ -199,6 +204,7 @@ func (c *cmdContext) table() *tabwriter.Writer {
 
 // UpCmd publishes a new artifact.
 type UpCmd struct {
+	Review   bool   `help:"Print the review URL so recipients can suggest changes."`
 	File     string `arg:"" type:"path" help:"File to publish."`
 	Slug     string `help:"Publish at a stable path instead of a random ID." placeholder:"SLUG"`
 	Filename string `help:"Override the filename recorded for the upload." placeholder:"NAME"`
@@ -215,6 +221,9 @@ func (u *UpCmd) Run(c *cmdContext) error {
 		return err
 	}
 
+	if u.Review && !c.globals.JSON {
+		art.URL = art.ReviewURL
+	}
 	return c.emitURL(art, raw)
 }
 

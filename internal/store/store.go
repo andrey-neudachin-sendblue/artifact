@@ -95,6 +95,34 @@ CREATE TABLE IF NOT EXISTS versions (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_updated_at ON artifacts(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS suggestions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artifact_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    author TEXT NOT NULL,
+    quote TEXT NOT NULL,
+    location TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'addressed', 'dismissed')),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (artifact_id, version) REFERENCES versions(artifact_id, n) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_suggestions_inbox ON suggestions(artifact_id, status, id);
+
+CREATE TABLE IF NOT EXISTS proposals (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    suggestion_id INTEGER NOT NULL REFERENCES suggestions(id) ON DELETE CASCADE,
+    base_version INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted')),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (artifact_id, base_version) REFERENCES versions(artifact_id, n) ON DELETE CASCADE
+) STRICT;
 `
 
 // Open prepares dataDir, opens dbPath, and applies the schema.
@@ -268,7 +296,7 @@ func (s *Store) AddVersion(ctx context.Context, ref, filename string, body io.Re
 		return nil, err
 	}
 
-	rec, err := s.commitVersion(ctx, art, dir, filename, b)
+	rec, err := s.commitVersion(ctx, art, dir, filename, b, nil)
 	if err != nil {
 		os.Remove(b.tmpPath)
 
@@ -278,7 +306,7 @@ func (s *Store) AddVersion(ctx context.Context, ref, filename string, body io.Re
 	return rec, nil
 }
 
-func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename string, b *blob) (*Record, error) {
+func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename string, b *blob, proposal *Proposal) (*Record, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
@@ -300,6 +328,19 @@ func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename 
 		return nil, ErrNotFound
 	case err != nil:
 		return nil, fmt.Errorf("read latest version: %w", err)
+	}
+
+	if proposal != nil {
+		var ready int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM proposals p JOIN suggestions s ON s.id = p.suggestion_id
+			WHERE p.id = ? AND p.artifact_id = ? AND p.status = 'pending' AND s.status = 'pending'`,
+			proposal.ID, art.ID).Scan(&ready)
+		if errors.Is(err, sql.ErrNoRows) || latest != proposal.BaseVersion {
+			return nil, ErrConflict
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	n := latest + 1
@@ -331,6 +372,17 @@ func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename 
 		os.Remove(filepath.Join(dir, strconv.Itoa(n)))
 
 		return nil, fmt.Errorf("update artifact: %w", err)
+	}
+
+	if proposal != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE proposals SET status = 'accepted' WHERE id = ?`, proposal.ID); err != nil {
+			os.Remove(filepath.Join(dir, strconv.Itoa(n)))
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE suggestions SET status = 'addressed' WHERE id = ?`, proposal.SuggestionID); err != nil {
+			os.Remove(filepath.Join(dir, strconv.Itoa(n)))
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

@@ -56,6 +56,7 @@ type Artifact struct {
 	Slug        *string `json:"slug"`
 	URL         string  `json:"url"`
 	RawURL      string  `json:"raw_url"`
+	ReviewURL   string  `json:"review_url"`
 	Version     int     `json:"version"`
 	VersionURL  string  `json:"version_url"`
 	Filename    string  `json:"filename"`
@@ -88,6 +89,7 @@ type Info struct {
 	ID            string    `json:"id"`
 	Slug          *string   `json:"slug"`
 	URL           string    `json:"url"`
+	ReviewURL     string    `json:"review_url"`
 	LatestVersion int       `json:"latest_version"`
 	CreatedAt     string    `json:"created_at"`
 	UpdatedAt     string    `json:"updated_at"`

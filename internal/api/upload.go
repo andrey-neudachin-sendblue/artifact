@@ -156,7 +156,13 @@ func (s *server) fail(w http.ResponseWriter, r *http.Request, op string, err err
 		writeError(w, http.StatusNotFound, codeNotFound, "artifact not found")
 	case errors.Is(err, store.ErrSlugTaken):
 		writeError(w, http.StatusConflict, codeSlugTaken, "slug already in use")
+	case errors.Is(err, store.ErrConflict):
+		writeError(w, http.StatusConflict, "revision_conflict", err.Error())
+	case errors.Is(err, store.ErrSuggestionLimit):
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "suggestion_limit", err.Error())
 	case errors.Is(err, store.ErrBadSlug),
+		errors.Is(err, store.ErrBadSuggestion),
 		errors.Is(err, store.ErrEmptyBody),
 		errors.Is(err, content.ErrBadFilename):
 		writeError(w, http.StatusBadRequest, codeBadRequest, err.Error())

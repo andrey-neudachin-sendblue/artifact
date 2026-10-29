@@ -13,6 +13,11 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 | `artifact info <id>` | Metadata and full version history |
 | `artifact rm <id>` | Delete the artifact, every version, and every blob |
 | `artifact open <id>` | Open in the operator's browser — for a human at a terminal, not for an agent |
+| `artifact review <id> [--version N]` | Print a review URL without changing content |
+| `artifact suggestions <id>` | Fetch pending feedback; `--json`, `--all`, `--after`, `--limit` supported |
+| `artifact propose <id> <suggestion> <file> --base-version N` | Upload a separate public candidate and print its preview URL |
+| `artifact accept <id> <proposal>` | Publish the reviewed candidate and address its suggestion atomically |
+| `artifact dismiss <id> <suggestion>` | Dismiss feedback without changing the artifact |
 | `artifact version` | Version, commit, build date. Needs no endpoint or token |
 
 `<id>` accepts an ID or a slug everywhere.
@@ -21,6 +26,8 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 
 | Flag | Applies to | Notes |
 | --- | --- | --- |
+| `--review` | `up` | Print the review URL instead of the ordinary URL; JSON always includes both |
+| `--base-version N` | `propose` | Required; version used to prepare the candidate |
 | `--slug SLUG` | `up` | Publish at a stable path instead of a random ID |
 | `--filename NAME` | `up`, `update` | Override the recorded filename, which is what drives content type |
 | `--limit N` | `list` | Default 50, server caps at 200 |
@@ -63,6 +70,9 @@ Given a published URL like `https://host/aB3xK9qZ`:
 | URL | Serves |
 | --- | --- |
 | `/aB3xK9qZ` | Latest version, rendered |
+| `/aB3xK9qZ/review` | Review latest and submit suggestions pinned to the loaded version |
+| `/aB3xK9qZ@2/review` | Review frozen version 2 |
+| `/aB3xK9qZ/proposals/<proposal>` | Before/after preview of a proposed revision |
 | `/aB3xK9qZ/raw` | Latest version, never rendered |
 | `/aB3xK9qZ@2` | Version 2, frozen; identical bytes forever |
 | `/aB3xK9qZ@2/raw` | Version 2, never rendered |
@@ -107,6 +117,8 @@ Errors are JSON with a stable `error.code`. Branch on the code, not the prose.
 | `unauthorized` | 401 | Token missing or wrong |
 | `not_found` | 404 | No such artifact, version, or filename |
 | `slug_taken` | 409 | Slug in use, including by a deleted artifact |
+| `revision_conflict` | 409 | Published version moved, or suggestion/proposal is already resolved |
+| `suggestion_limit` | 429 | Anonymous per-artifact feedback limit; includes Retry-After |
 | `payload_too_large` | 413 | Larger than the server's upload cap |
 | `internal` | 500 | Server-side; one retry is reasonable |
 

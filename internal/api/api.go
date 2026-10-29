@@ -60,6 +60,17 @@ func New(st *store.Store, cfg Config) http.Handler {
 	protected("DELETE /api/artifacts/{id}", s.handleDelete)
 	protected("GET /api/artifacts", s.handleList)
 	protected("GET /api/artifacts/{id}", s.handleInfo)
+	// Only submission is anonymous. Reading feedback and proposing/publishing
+	// revisions always require the owner token.
+	mux.HandleFunc("POST /api/artifacts/{id}/suggestions", s.handleSuggest)
+	protected("GET /api/artifacts/{id}/suggestions", s.handleSuggestions)
+	protected("POST /api/artifacts/{id}/suggestions/{suggestion}/dismiss", s.handleDismiss)
+	protected("POST /api/artifacts/{id}/suggestions/{suggestion}/proposals", s.handlePropose)
+	protected("POST /api/artifacts/{id}/proposals/{proposal}/accept", s.handleAccept)
+	mux.HandleFunc("GET /{ref}/review", s.handleReview)
+	mux.HandleFunc("GET /{ref}/review/content", s.handleReviewContent)
+	mux.HandleFunc("GET /{ref}/proposals/{proposal}", s.handleProposalPreview)
+	mux.HandleFunc("GET /{ref}/proposals/{proposal}/content", s.handleProposalContent)
 
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /{ref}", s.handleServe)
