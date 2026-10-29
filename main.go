@@ -47,7 +47,7 @@ func (e usageError) Error() string { return string(e) }
 // Globals are shared by every command.
 type Globals struct {
 	Endpoint string `help:"Artifact server base URL." env:"ARTIFACT_ENDPOINT" placeholder:"URL"`
-	Token    string `help:"Bearer token for the server." env:"ARTIFACT_TOKEN" placeholder:"TOKEN"`
+	Token    string `help:"Owner token, or a per-artifact edit key for scoped commands." env:"ARTIFACT_TOKEN" placeholder:"TOKEN"`
 	JSON     bool   `help:"Emit the raw API JSON instead of human output."`
 	Quiet    bool   `help:"Suppress all stderr diagnostics." short:"q"`
 	// Deliberately not type:"path": that mapper rewrites an empty value to
@@ -66,6 +66,7 @@ type CLI struct {
 	Info        InfoCmd        `cmd:"" help:"Show metadata and version history for an artifact."`
 	Rm          RmCmd          `cmd:"" help:"Delete an artifact, all versions, and all blobs."`
 	Open        OpenCmd        `cmd:"" help:"Open an artifact in the default browser."`
+	EditLink    EditLinkCmd    `cmd:"" help:"Issue an edit link for one artifact; --rotate revokes old links."`
 	Review      ReviewCmd      `cmd:"" help:"Print a shareable link for suggesting changes."`
 	Suggestions SuggestionsCmd `cmd:"" help:"Fetch recipient suggestions for an artifact."`
 	Propose     ProposeCmd     `cmd:"" help:"Upload a revision for preview without publishing it."`
@@ -204,7 +205,8 @@ func (c *cmdContext) table() *tabwriter.Writer {
 
 // UpCmd publishes a new artifact.
 type UpCmd struct {
-	Collab   bool   `help:"Create a collaborative artifact with suggestions and agent revision instructions (explicit opt-in)."`
+	Edit     bool   `help:"Print the edit link instead of the view-only link."`
+	Collab   bool   `help:"Print an edit link instead of the view-only link (legacy name)."`
 	Review   bool   `hidden:"" help:"Legacy alias for --collab."`
 	File     string `arg:"" type:"path" help:"File to publish."`
 	Slug     string `help:"Publish at a stable path instead of a random ID." placeholder:"SLUG"`
@@ -226,17 +228,18 @@ func (u *UpCmd) Run(c *cmdContext) error {
 		return err
 	}
 
-	if (u.Collab || u.Review) && !c.globals.JSON {
-		art.URL = art.ReviewURL
+	if (u.Edit || u.Collab || u.Review) && !c.globals.JSON {
+		art.URL = art.EditURL
 	}
 	return c.emitURL(art, raw)
 }
 
 // UpdateCmd adds a version to an existing artifact, leaving its URL alone.
 type UpdateCmd struct {
-	ID       string `arg:"" help:"Artifact ID or slug."`
-	File     string `arg:"" type:"path" help:"File to publish as the next version."`
-	Filename string `help:"Override the filename recorded for the upload." placeholder:"NAME"`
+	BaseVersion int    `help:"Version being edited; required with a per-artifact edit key."`
+	ID          string `arg:"" help:"Artifact ID or slug."`
+	File        string `arg:"" type:"path" help:"File to publish as the next version."`
+	Filename    string `help:"Override the filename recorded for the upload." placeholder:"NAME"`
 }
 
 func (u *UpdateCmd) Run(c *cmdContext) error {
@@ -245,7 +248,7 @@ func (u *UpdateCmd) Run(c *cmdContext) error {
 		return err
 	}
 
-	art, raw, err := api.Update(c.ctx, u.ID, u.File, filenameFor(u.Filename, u.File))
+	art, raw, err := api.Update(c.ctx, u.ID, u.File, filenameFor(u.Filename, u.File), u.BaseVersion)
 	if err != nil {
 		return err
 	}

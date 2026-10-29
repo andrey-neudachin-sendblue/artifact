@@ -13,7 +13,8 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 | `artifact info <id>` | Metadata and full version history |
 | `artifact rm <id>` | Delete the artifact, every version, and every blob |
 | `artifact open <id>` | Open in the operator's browser — for a human at a terminal, not for an agent |
-| `artifact review <id> [--version N]` | Print a review URL for an existing collaborative artifact |
+| `artifact edit-link <id> [--rotate]` | Issue an edit link; rotation revokes all previous links |
+| `artifact review <id> [--version N]` | Issue a keyed edit URL for any artifact |
 | `artifact suggestions <id>` | Fetch pending feedback; `--json`, `--all`, `--after`, `--limit` supported |
 | `artifact propose <id> <suggestion> <file> --base-version N` | Upload a separate public candidate and print its preview URL |
 | `artifact accept <id> <proposal>` | Publish the reviewed candidate and address its suggestion atomically |
@@ -26,8 +27,9 @@ Consulted on demand. The operating loop is in [SKILL.md](SKILL.md).
 
 | Flag | Applies to | Notes |
 | --- | --- | --- |
-| `--collab` | `up` | Explicitly create a collaborative artifact and print its review URL; default uploads are informative |
-| `--base-version N` | `propose` | Required; version used to prepare the candidate |
+| `--edit` | `up` | Print the keyed edit URL instead of the view-only URL |
+| `--collab` | `up` | Legacy alias for --edit; print the keyed edit URL |
+| `--base-version N` | `propose`, `update` | Candidate base; required for update with an edit key |
 | `--slug SLUG` | `up` | Publish at a stable path instead of a random ID |
 | `--filename NAME` | `up`, `update` | Override the recorded filename, which is what drives content type |
 | `--limit N` | `list` | Default 50, server caps at 200 |
@@ -65,19 +67,20 @@ first 512 bytes, then to `application/octet-stream`, which downloads.
 
 ## URL scheme
 
-Review, suggestion, proposal and agent-instruction routes only exist for
-collaborative artifacts. Informative artifacts have no collaboration metadata
-or review URL. The API reports `type` as `informative` or `collaborative`;
-`review_url` is omitted for informative artifacts. The hidden legacy `--review`
-flag is a compatibility alias for `--collab`.
+Every artifact supports review pages and revision APIs. Reading the inbox, submitting feedback and publishing require a valid per-artifact edit key or owner token. Legacy `type` is metadata only.
+Normal uploads print the view-only URL; `--edit` prints the edit URL. JSON upload
+responses contain both `url` and `edit_url`. `artifact edit-link <id>` issues a
+new edit link, and `--rotate` revokes every prior edit key for that artifact.
+An edit key can be supplied as `ARTIFACT_TOKEN` for scoped commands; `update`
+requires `--base-version N`. Only the owner can upload/list/delete/manage keys.
 
 Given a published URL like `https://host/aB3xK9qZ`:
 
 | URL | Serves |
 | --- | --- |
 | `/aB3xK9qZ` | Latest version, rendered |
-| `/aB3xK9qZ/review` | Review latest and submit suggestions pinned to the loaded version |
-| `/aB3xK9qZ@2/review` | Review frozen version 2 |
+| `/aB3xK9qZ/edit#key=…` | Edit latest and submit suggestions pinned to the loaded version |
+| `/aB3xK9qZ@2/edit#key=…` | Review version 2; stale saves are rejected |
 | `/aB3xK9qZ/proposals/<proposal>` | Before/after preview of a proposed revision |
 | `/aB3xK9qZ/raw` | Latest version, never rendered |
 | `/aB3xK9qZ@2` | Version 2, frozen; identical bytes forever |
@@ -123,7 +126,7 @@ Errors are JSON with a stable `error.code`. Branch on the code, not the prose.
 | `unauthorized` | 401 | Token missing or wrong |
 | `not_found` | 404 | No such artifact, version, or filename |
 | `slug_taken` | 409 | Slug in use, including by a deleted artifact |
-| `collaboration_disabled` | 409 | Artifact is informative; collaboration must be chosen at creation |
+| `revision_conflict` | 409 | Base version changed; reread current content before saving |
 | `revision_conflict` | 409 | Published version moved, or suggestion/proposal is already resolved |
 | `suggestion_limit` | 429 | Anonymous per-artifact feedback limit; includes Retry-After |
 | `payload_too_large` | 413 | Larger than the server's upload cap |

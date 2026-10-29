@@ -6,60 +6,35 @@ import (
 	"testing"
 )
 
-func TestInformativeArtifactHasNoCollaboration(t *testing.T) {
+func TestEveryArtifactSupportsKeyedEditing(t *testing.T) {
 	h := newHarness(t)
-	original := "<h1>Informative report</h1>"
-	resp, body := h.send(h.authed("POST", "/api/upload?filename=report.html", strings.NewReader(original)))
-	if resp.StatusCode != 201 {
-		t.Fatalf("upload: %d %s", resp.StatusCode, body)
-	}
-	var art struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		ReviewURL string `json:"review_url"`
-	}
-	json.Unmarshal(body, &art)
-	if art.Type != "informative" || art.ReviewURL != "" || strings.Contains(string(body), "review_url") {
-		t.Fatalf("default artifact: %s", body)
-	}
-	for _, path := range []string{"/" + art.ID, "/" + art.ID + "@1/raw"} {
-		resp, body := h.send(h.request("GET", path, nil))
-		if resp.StatusCode != 200 || string(body) != original || resp.Header.Get("Link") != "" {
-			t.Fatalf("informative bytes/metadata: %d %s %v", resp.StatusCode, body, resp.Header)
+	for _, kind := range []string{"informative", "collaborative"} {
+		_, body := h.send(h.authed("POST", "/api/upload?filename=report.html&type="+kind, strings.NewReader("<h1>Original</h1>")))
+		var art struct {
+			ID      string `json:"id"`
+			EditURL string `json:"edit_url"`
 		}
-	}
-	for _, path := range []string{"/review", "/review/content", "/review/instructions", "/proposals/missing", "/proposals/missing/content", "/proposals/missing/instructions"} {
-		resp, _ := h.send(h.request("GET", "/"+art.ID+path, nil))
-		if resp.StatusCode != 404 {
-			t.Fatalf("informative %s: %d", path, resp.StatusCode)
+		json.Unmarshal(body, &art)
+		key := strings.Split(art.EditURL, "#key=")[1]
+		for _, path := range []string{"/" + art.ID, "/" + art.ID + "/edit", "/" + art.ID + "/review", "/" + art.ID + "/review/instructions"} {
+			resp, body := h.send(h.request("GET", path, nil))
+			if resp.StatusCode != 200 || strings.Contains(string(body), key) {
+				t.Fatalf("view leaks access: %s %d", path, resp.StatusCode)
+			}
 		}
-	}
-	req := h.request("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(`{"version":1,"message":"Enable feedback"}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, body = h.send(req)
-	if resp.StatusCode != 409 || !strings.Contains(string(body), "collaboration_disabled") {
-		t.Fatalf("informative feedback: %d %s", resp.StatusCode, body)
-	}
-	for _, op := range []struct{ method, path string }{
-		{"GET", "suggestions"}, {"POST", "suggestions/1/dismiss"}, {"POST", "suggestions/1/proposals?filename=report.html&base_version=1"}, {"POST", "proposals/missing/accept"},
-	} {
-		resp, body := h.send(h.authed(op.method, "/api/artifacts/"+art.ID+"/"+op.path, strings.NewReader("<h1>Candidate</h1>")))
-		if resp.StatusCode != 409 {
-			t.Fatalf("informative %s: %d %s", op.path, resp.StatusCode, body)
+		req := h.request("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(`{"version":1,"message":"Change"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, _ := h.send(req)
+		if resp.StatusCode != 401 {
+			t.Fatalf("view-only write: %d", resp.StatusCode)
 		}
-	}
-	// Updates retain the type; trying to change it is rejected explicitly.
-	resp, body = h.send(h.authed("PUT", "/api/artifacts/"+art.ID+"?filename=report.html&type=collaborative", strings.NewReader("changed")))
-	if resp.StatusCode != 400 {
-		t.Fatalf("type conversion: %d %s", resp.StatusCode, body)
-	}
-	resp, body = h.send(h.authed("PUT", "/api/artifacts/"+art.ID+"?filename=report.html", strings.NewReader("changed")))
-	if resp.StatusCode != 200 || !strings.Contains(string(body), `"type":"informative"`) || strings.Contains(string(body), "review_url") {
-		t.Fatalf("informative update: %d %s", resp.StatusCode, body)
-	}
-	_, body = h.send(h.authed("GET", "/api/artifacts/"+art.ID, nil))
-	if !strings.Contains(string(body), `"type":"informative"`) || strings.Contains(string(body), "review_url") {
-		t.Fatalf("informative info: %s", body)
+		req = h.request("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(`{"version":1,"message":"Change"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, body = h.send(req)
+		if resp.StatusCode != 201 {
+			t.Fatalf("key suggestion: %d %s", resp.StatusCode, body)
+		}
 	}
 }
 

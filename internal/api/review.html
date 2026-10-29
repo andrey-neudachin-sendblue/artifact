@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{if .Proposal}}Review revision{{else}}Suggest a change{{end}} · {{.Title}}</title>
+<title>{{if .Proposal}}Review revision{{else}}Edit artifact{{end}} · {{.Title}}</title>
 <link rel="describedby" type="application/json" href="{{.InstructionsURL}}" title="Artifact revision instructions for agents">
 <script type="application/json" id="artifact-agent-instructions" nonce="{{.Nonce}}">{{.AgentInstructions}}</script>
 <style>
@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<header><div><h1>{{.Title}}</h1><span class="muted">Collaborative artifact · {{if .Proposal}}Proposed revision of{{else}}Viewing{{end}} version {{.Version}}</span></div><a href="{{.OriginalURL}}" target="_blank" rel="noopener">Open original</a></header>
+<header><div><h1>{{.Title}}</h1><span class="muted">{{if .Proposal}}Revision preview{{else}}<span id="access-mode">View only</span>{{end}} · {{if .Proposal}}Proposed revision of{{else}}Viewing{{end}} version {{.Version}}</span></div><a href="{{.OriginalURL}}" target="_blank" rel="noopener">Open original</a></header>
 <main>
 <div class="viewer">
 {{if .Proposal}}
@@ -34,9 +34,22 @@
 {{if and (eq .Proposal.Status "pending") (not .Stale)}}<p>After reviewing both versions, ask your agent to publish this revision:</p><code>artifact accept {{.ArtifactID}} {{.Proposal.ID}}</code>{{end}}
 <p class="muted">Only the owner can publish. Feedback and previews never run agent tools automatically.</p>
 {{else}}
+<p id="access-status" role="status">This is a view-only link. Open the edit link supplied by the owner to make changes.</p>
+<div id="editing-tools" hidden>
+<h2>Edit artifact</h2>
+<p>Save a new version, or suggest a change for an agent to prepare.</p>
+<form id="edit-form">
+<label for="source">Source</label><textarea id="source" rows="12" spellcheck="false" hidden></textarea>
+<p id="source-note" class="muted"></p>
+<label for="replacement">Replace with a file <small>(optional)</small></label><input type="file" id="replacement">
+<label for="filename">Filename</label><input id="filename" required>
+<button type="submit">Save new version</button>
+<p id="save-status" role="status" aria-label="Save status" aria-live="polite"></p>
+</form>
+<hr>
 <h2>Suggest a change</h2>
 <p>Tell the owner what to change. Your suggestion stays attached to version {{.Version}}.</p>
-{{if ne .Version .Latest}}<p><strong>You’re viewing an older version.</strong> The latest is version {{.Latest}}. <a href="/{{.ArtifactID}}/review">Review latest</a></p>{{end}}
+{{if ne .Version .Latest}}<p><strong>You’re viewing an older version.</strong> The latest is version {{.Latest}}. <a id="latest-edit" href="/{{.ArtifactID}}/edit">Open latest</a></p>{{end}}
 <form id="suggestion-form">
 <label for="message">What should change?</label><textarea id="message" name="message" required maxlength="8000" rows="5" placeholder="Make the explanation less technical…"></textarea>
 <label for="quote">Selected text <small>(optional)</small></label><textarea id="quote" name="quote" maxlength="2000" rows="2" placeholder="Select text in the document, or paste a short quote."></textarea>
@@ -45,11 +58,60 @@
 <button type="submit">Send suggestion</button>
 <p class="muted" style="margin-top:.8rem">The owner reviews suggestions before publishing changes. Anyone with the artifact link can view its content; keep feedback suitable for sharing.</p>
 </form>
-<p id="feedback" role="status" aria-live="polite"></p>
-<script nonce="{{.Nonce}}">
+<p id="feedback" role="status" aria-label="Suggestion status" aria-live="polite"></p>
+</div>
+<script type="module" nonce="{{.Nonce}}">
+const key=new URLSearchParams(location.hash.slice(1)).get("key") || "";
+const auth={Authorization:"Bearer "+key};
 const form=document.getElementById('suggestion-form');
 const feedback=document.getElementById('feedback');
 const frame=document.getElementById('artifact-content');
+const access=document.getElementById('access-status');
+const source=document.getElementById('source');
+const replacement=document.getElementById('replacement');
+const filename=document.getElementById('filename');
+const saveStatus=document.getElementById('save-status');
+let sourceEditable=false;
+if(key){
+ const latest=document.getElementById("latest-edit");if(latest)latest.hash=location.hash;
+ try{
+  const response=await fetch('/api/artifacts/'+{{.ArtifactID}},{headers:auth,cache:'no-store'});
+  if(!response.ok)throw new Error('This edit key is invalid or has been revoked. Ask the owner for a new edit link.');
+  const info=await response.json();
+  const version=info.versions.find(v=>v.n==={{.Version}});
+  filename.value=version.filename;
+  sourceEditable=version.size<=1048576 && (/^(text\/|application\/(json|xml|javascript))/.test(version.content_type));
+  if(sourceEditable){
+   const original=await fetch({{.OriginalURL}}+'/raw',{cache:'no-store'});
+   if(!original.ok)throw new Error('Could not load the source. Reload to try again.');
+   const bytes=await original.arrayBuffer();
+   try{source.value=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}catch{sourceEditable=false}
+  }
+  source.hidden=!sourceEditable;
+  document.getElementById('source-note').textContent=sourceEditable?'Edit the source above, or select a replacement file.':'Select a replacement file to update this artifact.';
+  document.getElementById('editing-tools').hidden=false;
+  document.getElementById('access-mode').textContent='Can edit';
+  access.textContent='Your edit link permits changes to this artifact. '+(info.latest_version!=={{.Version}}?'A newer version exists; open the latest edit link before saving.':'');
+ }catch(error){access.textContent=error.message}
+}
+replacement.addEventListener('change',()=>{if(replacement.files[0])filename.value=replacement.files[0].name});
+document.getElementById('edit-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const button=event.currentTarget.querySelector('button');
+ const body=replacement.files[0] || (sourceEditable?source.value:null);
+ if(body===null){saveStatus.textContent='Choose a replacement file first.';return}
+ button.disabled=true;saveStatus.textContent='Saving…';
+ try{
+  const query=new URLSearchParams({filename:filename.value,base_version:{{.Version}}});
+  const response=await fetch('/api/artifacts/'+{{.ArtifactID}}+'?'+query,{method:'PUT',headers:{...auth,'Content-Type':'application/octet-stream'},body});
+  const result=await response.json();
+  if(!response.ok)throw new Error(response.status===409?'Someone published a newer version. Your draft is still here; copy it before opening the latest edit link.':result.error?.message||'Could not save. Your draft is still here.');
+  saveStatus.textContent='Saved version '+result.version+'.';
+  const latest=document.createElement('a');latest.textContent='Open latest version';latest.href='/'+{{.ArtifactID}}+'@'+result.version+'/edit'+location.hash;
+  saveStatus.append(' ',latest);
+ }catch(error){saveStatus.textContent=error.message}
+ finally{button.disabled=false}
+});
 addEventListener('message',event=>{
  if(event.source!==frame.contentWindow||!event.data||event.data.type!=='artifact-selection'||typeof event.data.quote!=='string')return;
  document.getElementById('quote').value=event.data.quote.slice(0,500);
@@ -58,7 +120,7 @@ form.addEventListener('submit',async event=>{
  event.preventDefault();const button=form.querySelector('button[type=submit]');button.disabled=true;feedback.textContent='Sending suggestion…';
  const body={version:{{.Version}},message:form.elements.message.value,quote:form.elements.quote.value,location:form.elements.location.value,author:form.elements.author.value};
  try{
-  const response=await fetch('/api/artifacts/'+{{.ArtifactID}}+'/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await fetch('/api/artifacts/'+{{.ArtifactID}}+'/suggestions',{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:JSON.stringify(body)});
   const result=await response.json();
   if(!response.ok)throw new Error(result.error?.message||'Could not send suggestion. Try again.');
   form.elements.message.value='';form.elements.quote.value='';form.elements.location.value='';

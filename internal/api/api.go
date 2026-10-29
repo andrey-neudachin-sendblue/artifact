@@ -56,17 +56,18 @@ func New(st *store.Store, cfg Config) http.Handler {
 	}
 
 	protected("POST /api/upload", s.handleUpload)
-	protected("PUT /api/artifacts/{id}", s.handleUpdate)
+	mux.Handle("PUT /api/artifacts/{id}", s.requireArtifactAccess(http.HandlerFunc(s.handleUpdate)))
 	protected("DELETE /api/artifacts/{id}", s.handleDelete)
 	protected("GET /api/artifacts", s.handleList)
-	protected("GET /api/artifacts/{id}", s.handleInfo)
-	// Only submission is anonymous. Reading feedback and proposing/publishing
-	// revisions always require the owner token.
-	mux.HandleFunc("POST /api/artifacts/{id}/suggestions", s.handleSuggest)
-	protected("GET /api/artifacts/{id}/suggestions", s.handleSuggestions)
-	protected("POST /api/artifacts/{id}/suggestions/{suggestion}/dismiss", s.handleDismiss)
-	protected("POST /api/artifacts/{id}/suggestions/{suggestion}/proposals", s.handlePropose)
-	protected("POST /api/artifacts/{id}/proposals/{proposal}/accept", s.handleAccept)
+	mux.Handle("GET /api/artifacts/{id}", s.requireArtifactAccess(http.HandlerFunc(s.handleInfo)))
+	protected("POST /api/artifacts/{id}/edit-link", s.handleEditLink)
+	// All collaboration APIs require an artifact-scoped edit key or the owner token.
+	mux.Handle("POST /api/artifacts/{id}/suggestions", s.requireArtifactAccess(http.HandlerFunc(s.handleSuggest)))
+	mux.Handle("GET /api/artifacts/{id}/suggestions", s.requireArtifactAccess(http.HandlerFunc(s.handleSuggestions)))
+	mux.Handle("POST /api/artifacts/{id}/suggestions/{suggestion}/dismiss", s.requireArtifactAccess(http.HandlerFunc(s.handleDismiss)))
+	mux.Handle("POST /api/artifacts/{id}/suggestions/{suggestion}/proposals", s.requireArtifactAccess(http.HandlerFunc(s.handlePropose)))
+	mux.Handle("POST /api/artifacts/{id}/proposals/{proposal}/accept", s.requireArtifactAccess(http.HandlerFunc(s.handleAccept)))
+	mux.HandleFunc("GET /{ref}/edit", s.handleReview)
 	mux.HandleFunc("GET /{ref}/review", s.handleReview)
 	mux.HandleFunc("GET /{ref}/review/content", s.handleReviewContent)
 	mux.HandleFunc("GET /{ref}/review/instructions", s.handleAgentInstructions)
@@ -137,6 +138,7 @@ func noteArtifact(r *http.Request, id string) {
 // Authorization header or any request body.
 func (s *server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		started := time.Now()
 		info := &requestInfo{}
 		rec := &recorder{ResponseWriter: w}

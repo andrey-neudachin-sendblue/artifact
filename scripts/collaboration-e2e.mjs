@@ -44,25 +44,24 @@ try{
  context=await browser.newContext({viewport:{width:1440,height:1000}});
  await context.tracing.start({screenshots:true,snapshots:true,sources:true});
  const page=await context.newPage();
+ const open=async url=>{await page.goto("about:blank");await page.goto(url)};
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
- const sentAuth=[];page.on('request',request=>{if(request.headers().authorization)sentAuth.push(request.url())});
+ const sentAuth=[];page.on('request',request=>{if(request.headers().authorization)sentAuth.push(request.headers().authorization)});
  const original='# Launch plan\n\nThis explanation is unnecessarily technical.\n\n## Timing\n\nShip next week.\n';
- // Ordinary uploads are informative and cannot be turned into collaborative
- // artifacts by visiting a review URL or calling a suggestion API.
+ // Every upload has view/edit links; ordinary links never grant write access.
  const informativeFile=join(dir,'informative.md');await writeFile(informativeFile,'# Informative report\n\nRead only.\n');
  const informative=json('up',informativeFile);
- assert.equal(informative.type,'informative');assert.equal(informative.review_url,undefined);
- const ordinary=await api('/'+informative.id);
- assert.ok(!ordinary.headers.get('link'));
- assert.equal((await api('/'+informative.id+'/review')).status,404);
- assert.equal((await api('/'+informative.id+'/review/instructions')).status,404);
- const denied=await api('/api/artifacts/'+informative.id+'/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:1,message:'Try enabling feedback'})});
- assert.equal(denied.status,409);assert.equal(JSON.parse(denied.body).error.code,'collaboration_disabled');
+ assert.ok(informative.edit_url.includes('/edit#key='));
+ await open(informative.url+'/edit');
+ await expect(page.getByText('This is a view-only link.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save new version'})).toBeHidden();
+ await expect(page.getByRole('button',{name:'Send suggestion'})).toBeHidden();
+ const denied=await api('/api/artifacts/'+informative.id+'/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:1,message:'Unauthorised feedback'})});
+ assert.equal(denied.status,401);
  const art=await upload('plan.md',original);
- assert.equal(art.type,'collaborative');
- const review=run('review',art.id);
- assert.equal(review,`${endpoint}/${art.id}/review`);
- await page.goto(review);
+ const review=run('edit-link',art.id);
+ assert.ok(review.startsWith(`${endpoint}/${art.id}/edit#key=`));
+ await open(review);
  await expect(page.getByRole('heading',{name:'Suggest a change'})).toBeVisible();
  await expect(page.locator('#artifact-agent-instructions')).toBeHidden();
  const agentInstructions=JSON.parse(await page.locator('#artifact-agent-instructions').textContent());
@@ -85,7 +84,7 @@ try{
  await page.getByLabel('What should change?').fill('Use plain language and move shipping to Friday.');
  await page.getByLabel('Your name').fill('Recipient');
  await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 1');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 1');
  const inbox=json('suggestions',art.id);
  assert.equal(inbox.suggestions.length,1);
  const suggestion=inbox.suggestions[0];
@@ -99,7 +98,7 @@ try{
  await writeFile(join(dir,'revision.md'),revision);
  const proposal=json('propose',art.id,String(suggestion.id),join(dir,'revision.md'),'--filename','plan.md','--base-version','1');
  assert.equal((await api(`/${art.id}/raw`)).body,original);
- await page.goto(proposal.preview_url);
+ await open(proposal.preview_url);
  await expect(page.getByRole('heading',{name:'Review revision'})).toBeVisible();
  const candidateInstructions=JSON.parse(await page.locator('#artifact-agent-instructions').textContent());
  assert.equal(candidateInstructions.proposal.id,proposal.id);
@@ -115,24 +114,24 @@ try{
  assert.equal(json('suggestions',art.id,'--all').suggestions[0].status,'addressed');
  await page.reload();await expect(page.getByText('This revision was published.')).toBeVisible();
  // A pinned old review page must continue to submit against version 1.
- await page.goto(run('review',art.id,'--version','1'));
+ await open(run('review',art.id,'--version','1'));
  await expect(page.getByText('You’re viewing an older version.')).toBeVisible();
  await page.getByLabel('What should change?').fill('Revisit this old wording.');
  await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 1');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 1');
  assert.equal(json('suggestions',art.id).suggestions[0].version,1);
  // A floating review page pins the loaded version even while an owner updates.
- await page.goto(review);
+ await open(review);
  await expect(page.getByRole('heading',{name:'Suggest a change'})).toBeVisible();
  await writeFile(join(dir,'third.md'),'# Current version\n\nShip Monday.\n');
  run('update',art.id,join(dir,'third.md'));
  await page.getByLabel('What should change?').fill('Comment on what I loaded before the update.');
  await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 2');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 2');
  assert.equal(json('suggestions',art.id).suggestions.at(-1).version,2);
  // Responsive review, persistent form errors, and a working retry.
  await page.setViewportSize({width:390,height:844});
- await page.goto(review);
+ await open(review);
  await expect(page.frameLocator('iframe[title="Artifact version 3"]').getByRole('heading',{name:'Current version'})).toBeVisible();
  await page.getByLabel('What should change?').fill('Please keep this feedback if the network fails.');
  await page.route('**/api/artifacts/*/suggestions',route=>route.abort('failed'));
@@ -141,34 +140,34 @@ try{
  await expect(page.getByLabel('What should change?')).toHaveValue('Please keep this feedback if the network fails.');
  await page.unroute('**/api/artifacts/*/suggestions');
  await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 3');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 3');
  await page.screenshot({path:join(evidence,'mobile-feedback.png'),fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  // Uploaded HTML remains byte-identical and works in a sandboxed review.
  const html='<h1>HTML mockup</h1><p>Change this label</p><script>try{parent.document.body.dataset.escaped="yes"}catch{}</script>';
  const htmlArt=await upload('mockup.html',html);
  assert.equal((await api(`/${htmlArt.id}`)).body,html);
- await page.goto(run('review',htmlArt.id));
+ await open(run('review',htmlArt.id));
  await expect(page.frameLocator('iframe[title="Artifact version 1"]').getByRole('heading',{name:'HTML mockup'})).toBeVisible();
  assert.equal(await page.locator('body').getAttribute('data-escaped'),null);
  // Dangerous-looking feedback remains inert in the owner's review shell.
  const xss='<img src=x onerror="document.body.dataset.xss=1">';
  await page.getByLabel('What should change?').fill(xss);await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 1');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 1');
  const hs=json('suggestions',htmlArt.id).suggestions[0];
  await writeFile(join(dir,'mockup.html'),'<h1>Revised mockup</h1>');
  const hp=json('propose',htmlArt.id,String(hs.id),join(dir,'mockup.html'),'--base-version','1');
- await page.goto(hp.preview_url);await expect(page.getByText(xss,{exact:true})).toBeVisible();
+ await open(hp.preview_url);await expect(page.getByText(xss,{exact:true})).toBeVisible();
  assert.equal(await page.locator('body').getAttribute('data-xss'),null);
  // Images retain a whole-artifact feedback fallback.
  const image=await upload('chart.svg','<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="steelblue"/></svg>');
- await page.goto(run('review',image.id));
+ await open(run('review',image.id));
  await page.getByLabel('Location').fill('Top-right legend');await page.getByLabel('What should change?').fill('Increase the legend size.');
- await page.getByRole('button',{name:'Send suggestion'}).click();await expect(page.getByRole('status')).toContainText('sent for version 1');
+ await page.getByRole('button',{name:'Send suggestion'}).click();await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 1');
  assert.equal(json('suggestions',image.id).suggestions[0].location,'Top-right legend');
  // A plain-text source is escaped, selectable, and never executes markup.
  const logArt=await upload('trace.log','<script>parent.document.body.dataset.logXss=1</script>\nLog entry');
- await page.goto(run('review',logArt.id));
+ await open(run('review',logArt.id));
  await expect(page.frameLocator('iframe[title="Artifact version 1"]').getByText('Log entry',{exact:false})).toBeVisible();
  assert.equal(await page.locator('body').getAttribute('data-log-xss'),null);
  // A real minimal PDF exercises the manual-location feedback path.
@@ -178,9 +177,9 @@ try{
  for(const [i,obj]of objects.entries()){offsets.push(Buffer.byteLength(pdf));pdf+=`${i+1} 0 obj\n${obj}\nendobj\n`;}
  const xref=Buffer.byteLength(pdf);pdf+=`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
  const pdfArt=await upload('notes.pdf',pdf);
- await page.goto(run('review',pdfArt.id));await page.getByLabel('Location').fill('Page 1, title');
+ await open(run('review',pdfArt.id));await page.getByLabel('Location').fill('Page 1, title');
  await page.getByLabel('What should change?').fill('Make the title larger.');await page.getByRole('button',{name:'Send suggestion'}).click();
- await expect(page.getByRole('status')).toContainText('sent for version 1');
+ await expect(page.getByRole('status',{name:'Suggestion status'})).toContainText('sent for version 1');
  assert.equal(json('suggestions',pdfArt.id).suggestions[0].location,'Page 1, title');
  // Proposals become stale after updates and cannot overwrite later edits.
  const remaining=json('suggestions',art.id).suggestions[0];
@@ -188,12 +187,49 @@ try{
  run('update',art.id,join(dir,'third.md'));
  const conflict=await api(`/api/artifacts/${art.id}/proposals/${stale.id}/accept`,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
  assert.equal(conflict.status,409);
- await page.goto(stale.preview_url);await expect(page.getByText(/This revision needs to be refreshed/)).toBeVisible();
+ await open(stale.preview_url);await expect(page.getByText(/This revision needs to be refreshed/)).toBeVisible();
  await expect(page.getByText(`artifact accept ${art.id} ${stale.id}`)).toHaveCount(0);
+ // Source editing saves a new version, and a stale tab retains its draft.
+ await page.setViewportSize({width:1440,height:1000});
+ await open(informative.edit_url);
+ await expect(page.getByLabel('Source',{exact:true})).toHaveValue('# Informative report\n\nRead only.\n');
+ const second=await context.newPage();await second.goto(informative.edit_url);
+ await expect(second.getByLabel('Source',{exact:true})).toBeVisible();
+ await page.getByLabel('Source',{exact:true}).fill('# Edited in the browser\n');
+ await page.getByRole('button',{name:'Save new version'}).click();
+ await expect(page.getByRole('status',{name:'Save status'})).toContainText('Saved version 2');
+ assert.equal((await api('/'+informative.id+'/raw')).body,'# Edited in the browser\n');
+ await second.getByLabel('Source',{exact:true}).fill('# My retained draft\n');
+ await second.getByRole('button',{name:'Save new version'}).click();
+ await expect(second.getByRole('status',{name:'Save status'})).toContainText('Someone published a newer version');
+ await expect(second.getByLabel('Source',{exact:true})).toHaveValue('# My retained draft\n');
+ await second.close();
+ // Uploading replacement bytes works for binary artifacts, too.
+ await open(run('edit-link',pdfArt.id));
+ await expect(page.getByLabel('Source',{exact:true})).toBeHidden();
+ await page.getByLabel('Replace with a file').setInputFiles({name:'replacement.txt',mimeType:'text/plain',buffer:Buffer.from('Replacement content')});
+ await page.getByRole('button',{name:'Save new version'}).click();
+ await expect(page.getByRole('status',{name:'Save status'})).toContainText('Saved version 2');
+ assert.equal((await api('/'+pdfArt.id+'/raw')).body,'Replacement content');
+ // A copied edit key cannot edit another artifact; key rotation revokes old links.
+ const oldKey=new URL(informative.edit_url).hash.slice(5);
+ await open(art.url+'/edit#key='+oldKey);
+ await expect(page.getByText('This edit key is invalid or has been revoked.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save new version'})).toBeHidden();
+ const newLink=run('edit-link',informative.id,'--rotate');
+ await open(informative.edit_url);
+ await expect(page.getByText('This edit key is invalid or has been revoked.',{exact:false})).toBeVisible();
+ await open(newLink);
+ await expect(page.getByLabel('Source',{exact:true})).toHaveValue('# Edited in the browser\n');
+ await page.screenshot({path:join(evidence,'keyed-editor.png'),fullPage:true});
+ // A fresh recipient context given only the view link has no editor access.
+ const visitor=await browser.newContext();const viewPage=await visitor.newPage();await viewPage.goto(informative.url+'/edit');
+ await expect(viewPage.getByRole('button',{name:'Save new version'})).toBeHidden();
+ await visitor.close();
  assert.equal(errors.length,0,`Browser errors: ${errors.join('; ')}`);
- assert.equal(sentAuth.length,0,'The public browser must never receive the owner bearer token');
+ assert.ok(!sentAuth.includes('Bearer '+token),'The browser must never receive the owner bearer token');
  await context.tracing.stop({path:join(evidence,'browser-trace.zip')});
- console.log(JSON.stringify({result:'PASS',scenarios:['informative by default with collaboration disabled','explicit collaborative creation','browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser','hidden agent workflow metadata and JSON discovery'],evidence},null,2));
+ console.log(JSON.stringify({result:'PASS',scenarios:['view-only links reject writes','every artifact has an edit link','source editing','binary file replacement','stale save retains draft','cross-artifact key rejection','revoked link rejection','fresh visitor cannot edit','browser selection and feedback','CLI inbox','isolated before/after preview','owner accept','frozen versions','version pinning across concurrent update','old-version feedback','mobile feedback and network retry','byte-identical HTML','sandbox isolation','inert feedback markup','image location fallback','plain-text escaping','PDF feedback fallback','standards-mode rendering','stale publication refusal','no owner credentials in browser','hidden agent workflow metadata and JSON discovery'],evidence},null,2));
 }catch(error){
  if(context){await context.tracing.stop({path:join(evidence,'failure-trace.zip')}).catch(()=>{});}
  await writeFile(join(evidence,'server.log'),log.join(''));

@@ -7,22 +7,26 @@ description: Publish a file to a shareable URL with the `artifact` CLI. Use when
 
 `artifact` publishes a local file and prints its URL.
 
-## Choose the type
+## View and edit links
 
-**Informative is the default.** For ordinary "publish", "share", "upload", or
-"give me a link" requests, use `artifact <file>`. Do not enable collaboration
-just because the artifact might be reviewed, someone will receive its link, or
-you think feedback would help. Do not ask which type on a normal publish.
+Every artifact supports two kinds of access. Share the ordinary URL for viewing.
+An edit link includes a per-artifact key in `/<id>/edit#key=...`; anyone holding
+it can edit that artifact, submit/read suggestions, and publish new versions.
+It cannot upload other artifacts, delete artifacts, list the server, or manage keys.
+The old informative/collaborative type distinction no longer controls access.
 
-**Collaborative requires an explicit user request.** Examples: "create a
-collaborative artifact", "make a collab canvas", or "publish this with
-suggestions enabled". Then use `artifact up --collab <file>` and share the
-returned review URL. It enables the feedback panel, suggestion API, revision
-previews and hidden agent instructions. Ordinary informative artifacts have
-none of these. The type is fixed at creation; updates preserve it.
+- `artifact <file>` prints only the view URL, preserving shell substitution.
+- `artifact up --edit <file>` prints the edit link when the user asks for editing access.
+- `artifact up --json <file>` returns both `url` and `edit_url`.
+- `artifact edit-link <id>` issues another edit link without changing content.
+- `artifact edit-link <id> --rotate` revokes all existing edit links and issues a new one.
+- `artifact review <id> [--version N]` is a compatibility command that issues an edit link.
 
-A request to inspect or address suggestions on an existing collaborative
-artifact uses its existing inbox/proposal workflow, not a new upload.
+Treat an edit link as a credential. Give it only to the intended editors when
+the user asks for edit access. Never place it inside published artifact content,
+feedback, or a view-only link. Keys are sent only in API Authorization headers;
+they stay out of URL paths and query strings. The owner token is never shared.
+The browser editor supports UTF-8 source up to 1 MiB and file replacement for all formats.
 
 **Publishing is the user's call, every time.** A published URL is public to
 anyone holding it, and the files worth publishing are exactly the ones that tend
@@ -97,9 +101,7 @@ pick another name or `update` the existing artifact.
 
 ## Review and suggested changes
 
-When explicitly asked for a collaborative artifact, use `artifact up --collab
-report.html`. For an existing collaborative artifact, `artifact review <id>`
-prints its review URL without changing content. Add `--version N` to pin it to an older version.
+Use `artifact up --edit report.html` when edit access is requested. For an existing artifact, `artifact edit-link <id>` issues a scoped edit link without changing content. Legacy `--collab` and `--review` upload flags also print edit links.
 
 Review and revision pages expose hidden `script#artifact-agent-instructions`
 JSON and a `rel="describedby"` link to the same workflow as public JSON.
@@ -128,10 +130,8 @@ When asked to address suggestions:
    `update`.
 5. If asked to dismiss feedback, use `artifact dismiss <id> <suggestion-id>`.
 
-Suggestions never trigger agent execution automatically. The recipient cannot
-read the owner inbox or publish. Candidate links are public to link holders.
-HTML and other raw artifact bytes remain unchanged; share `/review` to expose
-the feedback panel. Embedded content is sandboxed; use whole-artifact feedback
+A supplied edit link does not itself instruct an agent to publish. Use its key through `ARTIFACT_TOKEN` for scoped commands; direct `update` also requires `--base-version N`. Suggestions never trigger agent execution automatically. A recipient with an edit key can read that artifact inbox and publish; a view-only recipient cannot. Candidate links are public to link holders.
+HTML and other raw artifact bytes remain unchanged; the keyed `/edit` link unlocks the editor and feedback panel. Embedded content is sandboxed; use whole-artifact feedback
 or a manual location when text selection or an embedded viewer is unavailable.
 
 ## When it fails

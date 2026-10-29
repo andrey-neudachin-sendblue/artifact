@@ -31,6 +31,7 @@ type errorDetail struct {
 // artifactPayload is the response body shared by upload, update, and each
 // entry of the list response.
 type artifactPayload struct {
+	EditURL     string  `json:"edit_url,omitempty"`
 	Type        string  `json:"type"`
 	ID          string  `json:"id"`
 	Slug        *string `json:"slug"`
@@ -144,8 +145,6 @@ func stamp(t time.Time) string {
 }
 
 func (s *server) reviewURL(art store.Artifact) string {
-	if art.Type != store.TypeCollaborative {
-		return ""
-	}
+
 	return s.artifactURL(art) + "/review"
 }

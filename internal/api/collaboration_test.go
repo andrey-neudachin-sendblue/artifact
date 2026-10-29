@@ -15,7 +15,7 @@ import (
 
 func (h *harness) suggestionJSON(id string, version int, message string) []byte {
 	h.t.Helper()
-	req := h.request("POST", "/api/artifacts/"+id+"/suggestions", strings.NewReader(fmt.Sprintf(`{"version":%d,"message":%q,"quote":"old words","location":"heading","author":"Reviewer"}`, version, message)))
+	req := h.authed("POST", "/api/artifacts/"+id+"/suggestions", strings.NewReader(fmt.Sprintf(`{"version":%d,"message":%q,"quote":"old words","location":"heading","author":"Reviewer"}`, version, message)))
 	req.Header.Set("Content-Type", "application/json")
 	resp, body := h.send(req)
 	if resp.StatusCode != 201 {
@@ -130,7 +130,7 @@ func TestSuggestionsValidationAndPagination(t *testing.T) {
 		{fmt.Sprintf(`{"version":1,"message":%q}`, strings.Repeat("x", 17000)), "application/json", "", 413},
 		{"{\"version\":1,\"message\":\"\xff\"}", "application/json", "", 400},
 	} {
-		req := h.request("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(tc.body))
+		req := h.authed("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(tc.body))
 		req.Header.Set("Content-Type", tc.contentType)
 		req.Header.Set("Origin", tc.origin)
 		resp, body := h.send(req)
@@ -159,7 +159,7 @@ func TestSuggestionsValidationAndPagination(t *testing.T) {
 	for range 27 {
 		h.suggestionJSON(art.ID, 1, "Feedback")
 	}
-	req := h.request("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(`{"version":1,"message":"too many"}`))
+	req := h.authed("POST", "/api/artifacts/"+art.ID+"/suggestions", strings.NewReader(`{"version":1,"message":"too many"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := h.send(req)
 	if resp.StatusCode != 429 || resp.Header.Get("Retry-After") == "" {

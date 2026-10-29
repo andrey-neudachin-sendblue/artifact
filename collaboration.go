@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // ReviewCmd prints the review link without publishing or changing any bytes.
@@ -20,15 +21,16 @@ func (r *ReviewCmd) Run(c *cmdContext) error {
 	if err != nil {
 		return err
 	}
-	if info.Type != "collaborative" {
-		return usageError("this artifact is informative; create with --collab to enable collaboration")
+	link, _, err := api.EditLink(c.ctx, r.ID, false)
+	if err != nil {
+		return err
 	}
-	target := info.ReviewURL
+	target := link.EditURL
 	if r.Version != 0 {
 		if r.Version < 1 || r.Version > info.LatestVersion {
 			return usageError("version does not exist")
 		}
-		target = info.URL + "@" + strconv.Itoa(r.Version) + "/review"
+		target = strings.Replace(target, "/edit#", "@"+strconv.Itoa(r.Version)+"/edit#", 1)
 	}
 	if c.globals.JSON {
 		_, err = fmt.Fprintf(c.stdout, "{\"review_url\":%q}\n", target)

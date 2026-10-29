@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strconv"
 
 	"github.com/10/artifact/internal/content"
 	"github.com/10/artifact/internal/store"
@@ -64,7 +65,15 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	noteArtifact(r, rec.Artifact.ID)
-	writeJSON(w, http.StatusCreated, s.recordPayload(*rec))
+	key, err := s.store.IssueEditKey(r.Context(), rec.Artifact.ID, false)
+	if err != nil {
+		s.fail(w, r, "issue edit key", err)
+		return
+	}
+	payload := s.recordPayload(*rec)
+	payload.EditURL = s.artifactURL(rec.Artifact) + "/edit#key=" + key
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusCreated, payload)
 }
 
 func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +92,21 @@ func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A slug belongs to the artifact, not to a version, so it is ignored here.
-	rec, err := s.store.AddVersion(r.Context(), r.PathValue("id"), up.filename, up.body)
+	var rec *store.Record
+	base, parseErr := strconv.Atoi(r.URL.Query().Get("base_version"))
+	if r.URL.Query().Has("base_version") && (parseErr != nil || base < 1) {
+		s.fail(w, r, "update", badRequest("base_version must be a positive integer"))
+		return
+	}
+	if !s.authorized(r) && base < 1 {
+		s.fail(w, r, "update", badRequest("base_version is required when editing with an edit key"))
+		return
+	}
+	if base > 0 {
+		rec, err = s.store.AddVersionAt(r.Context(), r.PathValue("id"), up.filename, up.body, base)
+	} else {
+		rec, err = s.store.AddVersion(r.Context(), r.PathValue("id"), up.filename, up.body)
+	}
 	if err != nil {
 		s.fail(w, r, "add version", err)
 
@@ -162,8 +185,6 @@ func (s *server) fail(w http.ResponseWriter, r *http.Request, op string, err err
 			fmt.Sprintf("upload exceeds the %d byte limit", tooLarge.Limit))
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, codeNotFound, "artifact not found")
-	case errors.Is(err, store.ErrNotCollaborative):
-		writeError(w, http.StatusConflict, "collaboration_disabled", err.Error())
 	case errors.Is(err, store.ErrSlugTaken):
 		writeError(w, http.StatusConflict, codeSlugTaken, "slug already in use")
 	case errors.Is(err, store.ErrConflict):

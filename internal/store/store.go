@@ -28,12 +28,11 @@ import (
 
 // Errors callers are expected to distinguish.
 var (
-	ErrNotFound         = errors.New("artifact not found")
-	ErrSlugTaken        = errors.New("slug already in use")
-	ErrBadSlug          = errors.New("invalid slug")
-	ErrEmptyBody        = errors.New("empty body")
-	ErrBadType          = errors.New("type must be informative or collaborative")
-	ErrNotCollaborative = errors.New("this artifact is informative; create with --collab to enable collaboration")
+	ErrNotFound  = errors.New("artifact not found")
+	ErrSlugTaken = errors.New("slug already in use")
+	ErrBadSlug   = errors.New("invalid slug")
+	ErrEmptyBody = errors.New("empty body")
+	ErrBadType   = errors.New("type must be informative or collaborative")
 )
 
 const (
@@ -104,6 +103,12 @@ CREATE TABLE IF NOT EXISTS versions (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_updated_at ON artifacts(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS artifact_edit_keys (
+    artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    digest TEXT NOT NULL,
+    PRIMARY KEY (artifact_id, digest)
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS suggestions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -316,7 +321,7 @@ func (s *Store) AddVersion(ctx context.Context, ref, filename string, body io.Re
 		return nil, err
 	}
 
-	rec, err := s.commitVersion(ctx, art, dir, filename, b, nil)
+	rec, err := s.commitVersion(ctx, art, dir, filename, b, nil, 0)
 	if err != nil {
 		os.Remove(b.tmpPath)
 
@@ -326,7 +331,7 @@ func (s *Store) AddVersion(ctx context.Context, ref, filename string, body io.Re
 	return rec, nil
 }
 
-func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename string, b *blob, proposal *Proposal) (*Record, error) {
+func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename string, b *blob, proposal *Proposal, expected int) (*Record, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
@@ -348,6 +353,10 @@ func (s *Store) commitVersion(ctx context.Context, art *Artifact, dir, filename 
 		return nil, ErrNotFound
 	case err != nil:
 		return nil, fmt.Errorf("read latest version: %w", err)
+	}
+
+	if expected > 0 && latest != expected {
+		return nil, ErrConflict
 	}
 
 	if proposal != nil {
@@ -743,13 +752,17 @@ func migrateArtifactTypes(db *sql.DB) error {
 	return tx.Commit()
 }
 
-func (s *Store) GetCollaborative(ctx context.Context, ref string) (*Artifact, error) {
+// AddVersionAt refuses to overwrite content changed since the editor loaded it.
+func (s *Store) AddVersionAt(ctx context.Context, ref, filename string, body io.Reader, expected int) (*Record, error) {
 	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	if art.Type != TypeCollaborative {
-		return nil, ErrNotCollaborative
+	dir := s.artifactDir(art.ID)
+	b, err := writeBlob(dir, body)
+	if err != nil {
+		return nil, err
 	}
-	return art, nil
+	defer os.Remove(b.tmpPath)
+	return s.commitVersion(ctx, art, dir, filename, b, nil, expected)
 }

@@ -43,7 +43,7 @@ func (s *server) reviewVersion(r *http.Request) (*store.Artifact, *store.Version
 	if !ok {
 		return nil, nil, store.ErrNotFound
 	}
-	art, err := s.store.GetCollaborative(r.Context(), reference)
+	art, err := s.store.Get(r.Context(), reference)
 	if err != nil {
 		return nil, nil, err
 	}

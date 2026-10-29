@@ -1,7 +1,6 @@
 # HTTP API
 
-All `/api/*` endpoints require `Authorization: Bearer $ARTIFACT_TOKEN`, except
-the anonymous JSON submission endpoint `POST /api/artifacts/{id}/suggestions`.
+All `/api/*` endpoints require `Authorization: Bearer $ARTIFACT_TOKEN`. Scoped edit keys also authorize info, update and collaboration APIs; upload, list, deletion and key management require the owner token.
 All artifact-serving routes are public and unauthenticated.
 
 A `401` is returned before the request body is read, so a bad token never
@@ -11,8 +10,7 @@ consumes an upload.
 
 ## `POST /api/upload`
 
-Creates a new artifact. `type` is `informative` by default; explicitly supply
-`type=collaborative` to enable suggestions and revision instructions. The type
+Creates a new artifact. Responses include `url` (view-only) and `edit_url` (a scoped capability). Legacy `type` is retained for compatibility and no longer controls edit access. The type
 is fixed at creation. Both raw and multipart uploads accept the type in query
 or form parameters. Unknown types return `400 bad_request`.
 
@@ -173,24 +171,28 @@ header (`inline` for everything previewable, `attachment` for the
 
 ## Suggestions and revision previews
 
-Upload, update, list and info responses include `type`. Collaborative artifacts
-additionally include `review_url`; informative responses omit it. Collaboration
-APIs return `409 collaboration_disabled` for informative artifacts. Public
-review/content/instruction routes return 404 and informative content never
-advertises collaboration links. `PUT` requests attempting to change the type
-are rejected. Existing artifacts with feedback migrate to collaborative on
-first upgrade; those without feedback migrate to informative.
+Every artifact supports keyed editing. Upload responses return an `edit_url`
+once; the key is stored only as a digest, never returned by info, list, raw,
+review or instruction routes. `POST /api/artifacts/{id}/edit-link` (owner only)
+issues another key and returns `view_url` and `edit_url`. Add `?rotate=true` to
+revoke all old keys. Keys are supplied as `Authorization: Bearer <key>`, never
+in URL queries. Edit links carry them in a browser fragment (`/edit#key=...`).
+View-only requests cannot submit suggestions or mutate content.
 
-Collaborative artifacts retain their ordinary content and raw URLs; share the
-review URL to expose the enabled feedback panel.
+`PUT /api/artifacts/{id}?filename=...&base_version=N` accepts an edit key or
+owner token. An edit key requires the base version; stale saves return 409.
+The check and version commit are atomic. Raw source/version URLs stay public.
+The browser loads no authenticated data until the key is verified and keeps it
+outside the sandboxed artifact document. `/review` remains a view-only shell
+unless supplied a valid edit key in the fragment, just like `/edit`.
 
 | Method | Path | Authorization | Result |
 | --- | --- | --- | --- |
-| POST | `/api/artifacts/{id}/suggestions` | Public, JSON only | 201, suggestion |
-| GET | `/api/artifacts/{id}/suggestions` | Bearer | 200, inbox |
-| POST | `/api/artifacts/{id}/suggestions/{suggestion}/dismiss` | Bearer | 204 |
-| POST | `/api/artifacts/{id}/suggestions/{suggestion}/proposals?filename=report.html&base_version=2` | Bearer | 201, proposal with preview_url |
-| POST | `/api/artifacts/{id}/proposals/{proposal}/accept` | Bearer | 200, ordinary artifact response |
+| POST | `/api/artifacts/{id}/suggestions` | Edit key or owner, JSON only | 201, suggestion |
+| GET | `/api/artifacts/{id}/suggestions` | Edit key or owner | 200, inbox |
+| POST | `/api/artifacts/{id}/suggestions/{suggestion}/dismiss` | Edit key or owner | 204 |
+| POST | `/api/artifacts/{id}/suggestions/{suggestion}/proposals?filename=report.html&base_version=2` | Edit key or owner | 201, proposal with preview_url |
+| POST | `/api/artifacts/{id}/proposals/{proposal}/accept` | Edit key or owner | 200, ordinary artifact response |
 | GET | `/{ref}/review` | Public | Review page, pinned to loaded version |
 | GET | `/{ref}@{n}/review` | Public | Review a particular version |
 | GET | `/{ref}/proposals/{proposal}` | Public | Before/after candidate preview |
@@ -201,7 +203,7 @@ published version. Acceptance verifies the current version and pending status
 under the store write lock, then publishes and resolves feedback in one SQLite
 transaction. Repeated or stale accepts return `409 revision_conflict`.
 
-Anonymous submission requires an explicit positive version (never “latest”):
+Authenticated submission requires an explicit positive version (never “latest”):
 
 ```json
 {"version":2,"message":"Make the explanation clearer","author":"Alex","quote":"selected words","location":"Chart title"}

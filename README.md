@@ -70,34 +70,40 @@ Give that file mode `0600` or the CLI warns on every run.
 
 ## Artifact types
 
-Artifacts are **informative by default**. They display the file, with no
-suggestion UI, collaboration API or hidden revision instructions. Agents should
-use this default for ordinary requests to publish or share information.
-
-Only when the user explicitly asks for a **collaborative artifact**, create one
-with `--collab`. That opt-in enables suggestions, revision previews and hidden
-agent instructions. The type is fixed at creation and preserved by updates.
-Viewing a `/review` URL never enables collaboration on an informative artifact.
+Every artifact has a view-only link and a separate edit link. The edit link
+contains a random per-artifact key in its URL fragment. Anyone holding it can
+save new versions, submit suggestions and use that artifact's revision APIs.
+The global owner token stays private. Keys cannot upload, list, delete or manage
+other artifacts. Existing artifacts gain edit links without changing their content.
 
 ```bash
-artifact report.html                   # informative
-artifact up --collab report.html       # collaborative, prints review URL
+artifact report.html                     # print the view-only URL
+artifact up --edit report.html           # print a keyed edit link
+artifact up --json report.html           # return both url and edit_url
+artifact edit-link daily-report          # issue a new edit link
+artifact edit-link daily-report --rotate # revoke old links and issue a new one
 ```
 
-## Suggested changes
+Keys are stored as SHA-256 digests and cannot be retrieved. Issue another link
+if you lose one; rotation revokes all prior links for that artifact. The browser
+supports UTF-8 source editing up to 1 MiB and file replacement for every format.
+Saving requires the exact base version, so concurrent edits return a conflict
+while preserving the editor's draft. Treat edit links like passwords; share the
+ordinary link for viewing.
 
-For a collaborative artifact:
+For suggested revisions:
+
 
 ```bash
-artifact up --collab report.html             # upload, print review URL
-artifact review daily-report                # review URL for an existing collaborative artifact
+artifact up --collab report.html             # upload, print keyed edit URL
+artifact review daily-report                # issue an edit URL for an existing artifact
 artifact review daily-report --version 2    # pin a review to version 2
 ```
 
 Recipients can select text in Markdown, HTML, or logs, or describe a location
 in an image, PDF, or other file. Suggestions retain the exact version that was
 loaded. Names are optional and self-reported. Anonymous recipients can submit
-feedback; only the bearer-token owner can read the inbox or publish revisions.
+feedback. Reading the inbox and publishing require the artifact edit key or owner token.
 
 The agent workflow is deliberately explicit:
 
@@ -140,7 +146,7 @@ The owner token never enters the browser. Feedback is untrusted recipient
 input, not authorization to execute tools or publish changes. Candidate preview
 links are public to anyone holding the link, just like published artifacts.
 
-The server bounds anonymous feedback to 16 KiB JSON, 30 submissions per artifact
+The server bounds keyed feedback to 16 KiB JSON, 30 submissions per artifact
 per minute, and 1,000 pending suggestions per artifact. It does not verify names
 or send notifications. An agent checks the inbox when asked; no agent or model
 runs automatically on the server.
@@ -150,8 +156,8 @@ runs automatically on the server.
 ```
 /aB3xK9qZ              latest, rendered
 /aB3xK9qZ/raw          latest, never rendered
-/aB3xK9qZ/review       review latest, submit versioned suggestions
-/aB3xK9qZ@2/review     review version 2
+/aB3xK9qZ/edit#key=…   edit latest and submit versioned suggestions
+/aB3xK9qZ@2/edit#key=… edit from version 2 (stale saves are rejected)
 /aB3xK9qZ@2            version 2, frozen forever
 /aB3xK9qZ/report.html  same file, path ends in .html
 ```
@@ -184,9 +190,7 @@ JavaScript, no external requests. Raw HTML inside Markdown passes through, since
 
 ## API
 
-`/api/*` needs `Authorization: Bearer $ARTIFACT_TOKEN`, except the public
-`POST /api/artifacts/{id}/suggestions` submission endpoint. Artifact and review
-URLs are public.
+`/api/*` needs `Authorization: Bearer $ARTIFACT_TOKEN`. An artifact edit key also authorizes its info, update and collaboration APIs. Artifact and review URLs are public; editing controls require a valid edit key.
 
 ```bash
 curl -sS -X POST \
@@ -231,7 +235,7 @@ backups: [SETUP.md](SETUP.md).
 - Bearer token only, compared in constant time. No cookie is ever set.
 - **Give it its own hostname.** Uploaded HTML and SVG run scripts on that origin, so host nothing else there.
 - Filenames are sanitized and kept in SQLite. They never touch a filesystem path.
-- The token can overwrite or delete anything. Every artifact is public. Disk only grows.
+- Edit keys grant access only to one artifact and can be revoked. The owner token can overwrite or delete anything. Every artifact is public. Disk only grows.
 
 [SETUP.md](SETUP.md) covers each in detail.
 
@@ -284,7 +288,4 @@ package directory; no Node dependency is added to this Go project. Set
 `ARTIFACT_E2E_EVIDENCE` to retain screenshots and the browser trace outside the
 test's temporary directory. It never calls the production service.
 
-On first upgrade to artifact types, existing artifacts with feedback retain
-collaboration; artifacts without feedback become informative. New artifacts
-always require explicit `--collab` (API `type=collaborative`). The old `--review`
-flag remains a compatibility alias for `--collab`.
+The legacy `type` field remains for compatibility but no longer controls access. All existing artifacts support keyed editing. Legacy `--collab` and `--review` upload flags print edit links; ordinary uploads print view-only URLs.

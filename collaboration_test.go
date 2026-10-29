@@ -11,15 +11,16 @@ import (
 func TestCollaborationCLI(t *testing.T) {
 	c := newCLI(t)
 	code, out, errout := c.run(c.connected("up", "--slug", "cli-review", "--collab", c.writeFile("plan.md", "# Plan"))...)
-	if code != 0 || strings.TrimSpace(out) != "https://artifact.example.com/cli-review/review" {
+	if code != 0 || !strings.HasPrefix(strings.TrimSpace(out), "https://artifact.example.com/cli-review/edit#key=") {
 		t.Fatalf("review upload: %d %s %s", code, out, errout)
 	}
 	code, out, errout = c.run(c.connected("review", "cli-review", "--version", "1")...)
-	if code != 0 || !strings.Contains(out, "cli-review@1/review") {
+	if code != 0 || !strings.Contains(out, "cli-review@1/edit#key=") {
 		t.Fatalf("review link: %d %s %s", code, out, errout)
 	}
 	req, _ := http.NewRequest("POST", c.server.URL+"/api/artifacts/cli-review/suggestions", strings.NewReader(`{"version":1,"message":"Clarify the plan"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cliToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -62,26 +63,33 @@ func TestCollaborationCLI(t *testing.T) {
 	}
 }
 
-func TestCLIRequiresExplicitCollaborativeCreation(t *testing.T) {
+func TestCLIEveryArtifactHasViewAndEditLinks(t *testing.T) {
 	c := newCLI(t)
 	code, out, errout := c.run(c.connected("--json", "up", c.writeFile("report.md", "# Report"))...)
 	var art struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		ReviewURL string `json:"review_url"`
+		ID      string `json:"id"`
+		URL     string `json:"url"`
+		EditURL string `json:"edit_url"`
 	}
 	json.Unmarshal([]byte(out), &art)
-	if code != 0 || art.Type != "informative" || art.ReviewURL != "" {
-		t.Fatalf("default type: %d %s %s", code, out, errout)
+	if code != 0 || art.URL == "" || !strings.Contains(art.EditURL, "/edit#key=") {
+		t.Fatalf("links: %d %s %s", code, out, errout)
 	}
-	code, out, errout = c.run(c.connected("review", art.ID)...)
-	if code != 2 || out != "" || !strings.Contains(errout, "informative") {
-		t.Fatalf("informative review enabled collaboration: %d %s %s", code, out, errout)
+	code, out, errout = c.run(c.connected("edit-link", art.ID)...)
+	if code != 0 || !strings.Contains(out, "/edit#key=") {
+		t.Fatalf("edit link: %d %s %s", code, out, errout)
 	}
-	// The old flag is still explicit opt-in, not an automatic upgrade on review.
-	code, out, errout = c.run(c.connected("--json", "up", "--review", c.writeFile("legacy.md", "# Legacy"))...)
-	json.Unmarshal([]byte(out), &art)
-	if code != 0 || art.Type != "collaborative" || art.ReviewURL == "" {
-		t.Fatalf("legacy explicit opt-in: %d %s %s", code, out, errout)
+	key := strings.TrimSpace(strings.Split(out, "#key=")[1])
+	code, out, errout = c.run("--endpoint", c.server.URL, "--token", key, "info", art.ID)
+	if code != 0 {
+		t.Fatalf("key access: %d %s %s", code, out, errout)
+	}
+	code, out, errout = c.run(c.connected("edit-link", art.ID, "--rotate")...)
+	if code != 0 {
+		t.Fatalf("rotation: %d %s %s", code, out, errout)
+	}
+	code, _, _ = c.run("--endpoint", c.server.URL, "--token", key, "info", art.ID)
+	if code != 3 {
+		t.Fatalf("revoked key exit: %d", code)
 	}
 }

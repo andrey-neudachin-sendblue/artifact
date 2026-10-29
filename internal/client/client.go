@@ -52,6 +52,7 @@ func (e *APIError) Error() string {
 
 // Artifact is the response body shared by upload, update, and list entries.
 type Artifact struct {
+	EditURL     string  `json:"edit_url"`
 	Type        string  `json:"type"`
 	ID          string  `json:"id"`
 	Slug        *string `json:"slug"`
@@ -110,8 +111,11 @@ func (c *Client) Upload(ctx context.Context, path, filename, slug, kind string) 
 }
 
 // Update replaces an artifact's contents, creating the next version.
-func (c *Client) Update(ctx context.Context, id, path, filename string) (*Artifact, []byte, error) {
+func (c *Client) Update(ctx context.Context, id, path, filename string, baseVersion ...int) (*Artifact, []byte, error) {
 	query := url.Values{"filename": {filename}}
+	if len(baseVersion) > 0 && baseVersion[0] > 0 {
+		query.Set("base_version", strconv.Itoa(baseVersion[0]))
+	}
 	target := "/api/artifacts/" + url.PathEscape(id) + "?" + query.Encode()
 
 	return sendFile[Artifact](ctx, c, http.MethodPut, target, path)

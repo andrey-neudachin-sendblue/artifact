@@ -56,7 +56,7 @@ func (s *Store) AddSuggestion(ctx context.Context, ref string, in Suggestion) (*
 		!utf8.ValidString(in.Message+in.Author+in.Quote+in.Location) {
 		return nil, ErrBadSuggestion
 	}
-	art, err := s.GetCollaborative(ctx, ref)
+	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (s *Store) Suggestion(ctx context.Context, artifactID string, id int64) (*S
 }
 
 func (s *Store) Suggestions(ctx context.Context, ref string, all bool, after int64, limit int) ([]Suggestion, int64, error) {
-	art, err := s.GetCollaborative(ctx, ref)
+	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -138,7 +138,7 @@ func (s *Store) Suggestions(ctx context.Context, ref string, all bool, after int
 }
 
 func (s *Store) DismissSuggestion(ctx context.Context, ref string, id int64) error {
-	art, err := s.GetCollaborative(ctx, ref)
+	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (s *Store) ProposalPath(artifactID, proposalID string) string {
 // Propose stores a candidate separately from published versions. A proposal is
 // based on the CURRENT version; an older suggestion retains its original context.
 func (s *Store) Propose(ctx context.Context, ref string, suggestionID int64, base int, filename string, body io.Reader) (*Proposal, error) {
-	art, err := s.GetCollaborative(ctx, ref)
+	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (s *Store) Propose(ctx context.Context, ref string, suggestionID int64, bas
 }
 
 func (s *Store) Proposal(ctx context.Context, ref, id string) (*Artifact, *Proposal, error) {
-	art, err := s.GetCollaborative(ctx, ref)
+	art, err := s.Get(ctx, ref)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -243,5 +243,5 @@ func (s *Store) AcceptProposal(ctx context.Context, ref, id string) (*Record, er
 		return nil, err
 	}
 	defer os.Remove(b.tmpPath)
-	return s.commitVersion(ctx, art, s.artifactDir(art.ID), p.Filename, b, p)
+	return s.commitVersion(ctx, art, s.artifactDir(art.ID), p.Filename, b, p, 0)
 }
